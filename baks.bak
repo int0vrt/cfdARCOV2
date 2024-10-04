@@ -1,0 +1,215 @@
+/*
+cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
+Copyright (C) 2024 cfdARCHO
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+//    std::vector<CudaDataMatrix> grads_self_x_v, grads_self_y_v, grads_neigh_x_v, grads_neigh_y_v, cur_self_v, cur_neigh_v;
+//
+//    for (int j = 0; j < 4; ++j) {
+//        grads_self_x_v.push_back(grads_x);
+//        grads_self_y_v.push_back(grads_y);
+//        grads_neigh_x_v.push_back(std::get<0>(grad_redist_cu[j]));
+//        grads_neigh_y_v.push_back(std::get<1>(grad_redist_cu[j]));
+//        cur_self_v.push_back(current_cu);
+//        cur_neigh_v.push_back(current_redist_cu[j]);
+//    }
+//
+//    auto cur_self_cu = from_multiple_cols(cur_self_v);
+//    auto cur_neigh_cu = from_multiple_cols(cur_neigh_v);
+//    auto grads_self_x_cu = from_multiple_cols(grads_self_x_v);
+//    auto grads_self_y_cu = from_multiple_cols(grads_self_y_v);
+//    auto grads_neigh_x_cu = from_multiple_cols(grads_neigh_x_v);
+//    auto grads_neigh_y_cu = from_multiple_cols(grads_neigh_y_v);
+//
+//    auto grads_self_xd = grads_self_x_cu * mesh->_vec_in_edge_direction_x_cu;
+//    auto grads_self_yd = grads_self_y_cu * mesh->_vec_in_edge_direction_y_cu;
+//    auto grads_neigh_xd = grads_neigh_x_cu * mesh->_vec_in_edge_neigh_direction_x_cu;
+//    auto grads_neigh_yd = grads_neigh_y_cu * mesh->_vec_in_edge_neigh_direction_y_cu;
+//
+//    auto val_self_cu = grads_self_xd + grads_self_yd + cur_self_cu;
+//    auto val_neigh_cu = grads_neigh_xd + grads_neigh_yd + cur_neigh_cu;
+//
+//    auto ret_sum_cu = div_const((val_self_cu + val_neigh_cu), 2);
+//
+//    auto ret_r_cu = from_multiple_cols({get_col(val_neigh_cu, num_nodes, 4, 0),
+//                                        get_col(val_self_cu, num_nodes, 4, 1),
+//                                        get_col(val_self_cu, num_nodes, 4, 2),
+//                                        get_col(val_neigh_cu, num_nodes, 4, 3)
+//    });
+//    auto ret_l_cu = from_multiple_cols({get_col(val_self_cu, num_nodes, 4, 0),
+//                                        get_col(val_neigh_cu, num_nodes, 4, 1),
+//                                        get_col(val_neigh_cu, num_nodes, 4, 2),
+//                                        get_col(val_self_cu, num_nodes, 4, 3)
+//                                       });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//__global__ void get_interface_vars_first_order_k(
+//        const double* grads_x,
+//        const double* grads_y,
+//        const double* grad_redist_cu_x1,
+//        const double* grad_redist_cu_x2,
+//        const double* grad_redist_cu_x3,
+//        const double* grad_redist_cu_x4,
+//        const double* grad_redist_cu_y1,
+//        const double* grad_redist_cu_y2,
+//        const double* grad_redist_cu_y3,
+//        const double* grad_redist_cu_y4,
+//        const double* current_cu,
+//        const double* current_redist_cu1,
+//        const double* current_redist_cu2,
+//        const double* current_redist_cu3,
+//        const double* current_redist_cu4,
+//        const double* vec_in_edge_direction_x_cu,
+//        const double* vec_in_edge_direction_y_cu,
+//        const double* vec_in_edge_neigh_direction_x_cu,
+//        const double* vec_in_edge_neigh_direction_y_cu,
+//        double* ret_sum_cu,
+//        double* ret_r_cu,
+//        double* ret_l_cu,
+//        int rows
+//) {
+//
+//    auto idx = blockIdx.x * blockDim.x + threadIdx.x;
+//    auto t = threadIdx.x;
+//
+//    int idx_norm_1 = idx * 4 + 0;
+//    int idx_norm_2 = idx * 4 + 1;
+//    int idx_norm_3 = idx * 4 + 2;
+//    int idx_norm_4 = idx * 4 + 3;
+//
+//    double val_self_cu_1 = 0;
+//    double val_self_cu_2 = 0;
+//    double val_self_cu_3 = 0;
+//    double val_self_cu_4 = 0;
+//    double val_neigh_cu_1 = 0;
+//    double val_neigh_cu_2 = 0;
+//    double val_neigh_cu_3 = 0;
+//    double val_neigh_cu_4 = 0;
+//
+//    const int cols = 4;
+//
+//    if(idx < rows) {
+//        val_self_cu_1 = grads_x[idx] * vec_in_edge_direction_x_cu[idx * cols + 0];
+//        val_self_cu_1 = val_self_cu_1 + grads_y[idx] * vec_in_edge_direction_y_cu[idx * cols + 0];
+//        val_self_cu_1 = val_self_cu_1 + current_cu[idx];
+//
+//        val_self_cu_2 = grads_x[idx] * vec_in_edge_direction_x_cu[idx * cols + 1];
+//        val_self_cu_2 = val_self_cu_2 + grads_y[idx] * vec_in_edge_direction_y_cu[idx * cols + 1];
+//        val_self_cu_2 = val_self_cu_2 + current_cu[idx];
+//
+//        val_self_cu_3 = grads_x[idx] * vec_in_edge_direction_x_cu[idx * cols + 2];
+//        val_self_cu_3 = val_self_cu_3 + grads_y[idx] * vec_in_edge_direction_y_cu[idx * cols + 2];
+//        val_self_cu_3 = val_self_cu_3 + current_cu[idx];
+//
+//        val_self_cu_4 = grads_x[idx] * vec_in_edge_direction_x_cu[idx * cols + 3];
+//        val_self_cu_4 = val_self_cu_4 + grads_y[idx] * vec_in_edge_direction_y_cu[idx * cols + 3];
+//        val_self_cu_4 = val_self_cu_4 + current_cu[idx];
+//
+//
+//        val_neigh_cu_1 = grad_redist_cu_x1[idx] * vec_in_edge_neigh_direction_x_cu[idx * cols + 0];
+//        val_neigh_cu_1 = val_neigh_cu_1 + grad_redist_cu_y1[idx] * vec_in_edge_neigh_direction_y_cu[idx * cols + 0];
+//        val_neigh_cu_1 = val_neigh_cu_1 + current_redist_cu1[idx];
+//
+//        val_neigh_cu_2 = grad_redist_cu_x2[idx] * vec_in_edge_neigh_direction_x_cu[idx * cols + 1];
+//        val_neigh_cu_2 = val_neigh_cu_2 + grad_redist_cu_y2[idx] * vec_in_edge_neigh_direction_y_cu[idx * cols + 1];
+//        val_neigh_cu_2 = val_neigh_cu_2 + current_redist_cu2[idx];
+//
+//        val_neigh_cu_3 = grad_redist_cu_x3[idx] * vec_in_edge_neigh_direction_x_cu[idx * cols + 2];
+//        val_neigh_cu_3 = val_neigh_cu_3 + grad_redist_cu_y3[idx] * vec_in_edge_neigh_direction_y_cu[idx * cols + 2];
+//        val_neigh_cu_3 = val_neigh_cu_3 + current_redist_cu3[idx];
+//
+//        val_neigh_cu_4 = grad_redist_cu_x4[idx] * vec_in_edge_neigh_direction_x_cu[idx * cols + 3];
+//        val_neigh_cu_4 = val_neigh_cu_4 + grad_redist_cu_y4[idx] * vec_in_edge_neigh_direction_y_cu[idx * cols + 3];
+//        val_neigh_cu_4 = val_neigh_cu_4 + current_redist_cu4[idx];
+//
+//        ret_sum_cu[idx*cols] = (val_self_cu_1 + val_neigh_cu_1) / 2.;
+//        ret_sum_cu[idx*cols + 1] = (val_self_cu_2 + val_neigh_cu_2) / 2.;
+//        ret_sum_cu[idx*cols + 2] = (val_self_cu_3 + val_neigh_cu_3) / 2.;
+//        ret_sum_cu[idx*cols + 3] = (val_self_cu_4 + val_neigh_cu_4) / 2.;
+//
+//        ret_r_cu[idx*cols] = val_neigh_cu_1;
+//        ret_r_cu[idx*cols + 1] = val_self_cu_2;
+//        ret_r_cu[idx*cols + 2] = val_self_cu_3;
+//        ret_r_cu[idx*cols + 3] = val_neigh_cu_4;
+//
+//        ret_l_cu[idx*cols] = val_self_cu_1;
+//        ret_l_cu[idx*cols + 1] = val_neigh_cu_2;
+//        ret_l_cu[idx*cols + 2] = val_neigh_cu_3;
+//        ret_l_cu[idx*cols + 3] = val_self_cu_4;
+//    }
+//}
+//
+//CudaDataMatrix get_interface_vars_first_order_kern(
+//        const CudaDataMatrix& grad_x,
+//        const CudaDataMatrix& grad_y,
+//        const std::vector<std::tuple<CudaDataMatrix, CudaDataMatrix>>& grad_redist_cu,
+//        const CudaDataMatrix& current_cu,
+//        const std::vector<CudaDataMatrix>& current_redist_cu,
+//        const CudaDataMatrix& vec_in_edge_direction_x_cu,
+//        const CudaDataMatrix& vec_in_edge_direction_y_cu,
+//        const CudaDataMatrix& vec_in_edge_neigh_direction_x_cu,
+//        const CudaDataMatrix& vec_in_edge_neigh_direction_y_cu,
+//        CudaDataMatrix& ret_sum_cu,
+//        CudaDataMatrix& ret_r_cu,
+//        CudaDataMatrix& ret_l_cu
+//) {
+//    int rows = current_cu._size;
+//    int blocksize = BLOCK_SIZE;
+//    int nblocks = std::ceil(static_cast<double>(rows) / static_cast<double>(blocksize));
+//    CudaDataMatrix res {rows};
+//
+//    get_interface_vars_first_order_k<<<nblocks, blocksize>>>(
+//            grad_x.data.get(),
+//            grad_y.data.get(),
+//            std::get<0>(grad_redist_cu.at(0)).data.get(),
+//            std::get<0>(grad_redist_cu.at(1)).data.get(),
+//            std::get<0>(grad_redist_cu.at(2)).data.get(),
+//            std::get<0>(grad_redist_cu.at(3)).data.get(),
+//            std::get<1>(grad_redist_cu.at(0)).data.get(),
+//            std::get<1>(grad_redist_cu.at(1)).data.get(),
+//            std::get<1>(grad_redist_cu.at(2)).data.get(),
+//            std::get<1>(grad_redist_cu.at(3)).data.get(),
+//            current_cu.data.get(),
+//            current_redist_cu.at(0).data.get(),
+//            current_redist_cu.at(1).data.get(),
+//            current_redist_cu.at(2).data.get(),
+//            current_redist_cu.at(3).data.get(),
+//            vec_in_edge_direction_x_cu.data.get(),
+//            vec_in_edge_direction_y_cu.data.get(),
+//            vec_in_edge_neigh_direction_x_cu.data.get(),
+//            vec_in_edge_neigh_direction_y_cu.data.get(),
+//            ret_sum_cu.data.get(),
+//            ret_r_cu.data.get(),
+//            ret_l_cu.data.get(),
+//            rows
+//    );
+////    cudaDeviceSynchronize();
+//
+//    return res;
+//}

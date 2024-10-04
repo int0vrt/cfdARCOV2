@@ -1,0 +1,83 @@
+Running experiment euler cuda_enable = True mesh_size = (20, 20, 20) n_timesteps = 200 omp_threads = 8                                                        │
+Exec command:  ['/root/projs/cfdARCOV2/cfdARCO/scripts/../bin/cfdARCO_euler', '-Lx', '20', '-Ly', '20', '-Lz', '20', '-dx', '1', '-dy', '1', '-dz', '1', '--vi│
+sualize', '-t', '200', '-dt', '0.005', '-c']                                                                                                                  │
+Iter 0: time_seconds = 0.417278 mpts_p_sec = 3.8343742061647155                                                                                               │
+Iter 1: time_seconds = 0.416572 mpts_p_sec = 3.8408726462652316                                                                                               │
+Iter 2: time_seconds = 0.416979 mpts_p_sec = 3.8371236920804166                                                                                               │
+Res(mesh_size=(20, 20, 20), n_timesteps=200, cuda_enable=True) = 3.8408726462652316 mpts/sec                                                                  │
+Running experiment euler cuda_enable = True mesh_size = (30, 30, 30) n_timesteps = 200 omp_threads = 8                                                        │
+Exec command:  ['/root/projs/cfdARCOV2/cfdARCO/scripts/../bin/cfdARCO_euler', '-Lx', '30', '-Ly', '30', '-Lz', '30', '-dx', '1', '-dy', '1', '-dz', '1', '--vi│
+sualize', '-t', '200', '-dt', '0.005', '-c']                                                                                                                  │
+Iter 0: time_seconds = 0.639092 mpts_p_sec = 8.44948771068954                                                                                                 │
+Iter 1: time_seconds = 0.623522 mpts_p_sec = 8.660480303822478                                                                                                │
+Iter 2: time_seconds = 0.513095 mpts_p_sec = 10.524366832652824                                                                                               │
+Res(mesh_size=(30, 30, 30), n_timesteps=200, cuda_enable=True) = 10.524366832652824 mpts/sec                                                                  │
+Running experiment euler cuda_enable = True mesh_size = (60, 60, 60) n_timesteps = 200 omp_threads = 8                                                        │
+Exec command:  ['/root/projs/cfdARCOV2/cfdARCO/scripts/../bin/cfdARCO_euler', '-Lx', '60', '-Ly', '60', '-Lz', '60', '-dx', '1', '-dy', '1', '-dz', '1', '--vi│
+sualize', '-t', '200', '-dt', '0.005', '-c']                                                                                                                  │
+Iter 0: time_seconds = 1.686226 mpts_p_sec = 25.61934165408433                                                                                                │
+Iter 1: time_seconds = 1.726568 mpts_p_sec = 25.020734775577907                                                                                               │
+Iter 2: time_seconds = 1.687059 mpts_p_sec = 25.6066918821452                                                                                                 │
+Res(mesh_size=(60, 60, 60), n_timesteps=200, cuda_enable=True) = 25.61934165408433 mpts/sec                                                                   │
+Running experiment euler cuda_enable = True mesh_size = (100, 100, 100) n_timesteps = 200 omp_threads = 8                                                     │
+Exec command:  ['/root/projs/cfdARCOV2/cfdARCO/scripts/../bin/cfdARCO_euler', '-Lx', '100', '-Ly', '100', '-Lz', '100', '-dx', '1', '-dy', '1', '-dz', '1', '-│
+-visualize', '-t', '200', '-dt', '0.005', '-c']                                                                                                               │
+Iter 0: time_seconds = 6.716193 mpts_p_sec = 29.77877496968893                                                                                                │
+Iter 1: time_seconds = 6.7938 mpts_p_sec = 29.4386057876299                                                                                                   │
+Iter 2: time_seconds = 6.720017 mpts_p_sec = 29.761829471562347                                                                                               │
+Res(mesh_size=(100, 100, 100), n_timesteps=200, cuda_enable=True) = 29.77877496968893 mpts/sec                                                                │
+Running experiment euler cuda_enable = True mesh_size = (150, 150, 150) n_timesteps = 200 omp_threads = 8                                                     │
+Exec command:  ['/root/projs/cfdARCOV2/cfdARCO/scripts/../bin/cfdARCO_euler', '-Lx', '150', '-Ly', '150', '-Lz', '150', '-dx', '1', '-dy', '1', '-dz', '1', '-│
+-visualize', '-t', '200', '-dt', '0.005', '-c']                                                                                                               │
+Iter 0: time_seconds = 23.40216 mpts_p_sec = 28.843491370027387                                                                                               │
+Iter 1: time_seconds = 23.058632 mpts_p_sec = 29.2732023304765                                                                                                │
+Iter 2: time_seconds = 23.263026 mpts_p_sec = 29.016001615610968                                                                                              │
+Res(mesh_size=(150, 150, 150), n_timesteps=200, cuda_enable=True) = 29.2732023304765 mpts/sec                                                                 │
+Running experiment euler cuda_enable = True mesh_size = (200, 200, 200) n_timesteps = 200 omp_threads = 8                                                     │
+Exec command:  ['/root/projs/cfdARCOV2/cfdARCO/scripts/../bin/cfdARCO_euler', '-Lx', '200', '-Ly', '200', '-Lz', '200', '-dx', '1', '-dy', '1', '-dz', '1', '-│
+-visualize', '-t', '200', '-dt', '0.005', '-c']                                                                                                               │
+Iter 0: time_seconds = 59.65315 mpts_p_sec = 26.821718551325457                                                                                               │
+Iter 1: time_seconds = 58.378416 mpts_p_sec = 27.40738974486735                                                                                               │
+Iter 2: time_seconds = 59.355421 mpts_p_sec = 26.956257289456342                                                                                              │
+Res(mesh_size=(200, 200, 200), n_timesteps=200, cuda_enable=True) = 27.40738974486735 mpts/sec                                                                │
+Running experiment euler cuda_enable = True mesh_size = (250, 250, 250) n_timesteps = 200 omp_threads = 8                                                     │
+Exec command:  ['/root/projs/cfdARCOV2/cfdARCO/scripts/../bin/cfdARCO_euler', '-Lx', '250', '-Ly', '250', '-Lz', '250', '-dx', '1', '-dy', '1', '-dz', '1', '-│
+-visualize', '-t', '200', '-dt', '0.005', '-c']                                                                                                               │
+Iter 0: time_seconds = 209.860467 mpts_p_sec = 14.890846497544484                                                                                             │
+Iter 1: time_seconds = 209.782919 mpts_p_sec = 14.896351022744613                                                                                             │
+Iter 2: time_seconds = 208.800987 mpts_p_sec = 14.966404349420054                                                                                             │
+Res(mesh_size=(250, 250, 250), n_timesteps=200, cuda_enable=True) = 14.966404349420054 mpts/sec                                                               │
+Running experiment euler cuda_enable = True mesh_size = (300, 300, 300) n_timesteps = 200 omp_threads = 8                                                     │
+Exec command:  ['/root/projs/cfdARCOV2/cfdARCO/scripts/../bin/cfdARCO_euler', '-Lx', '300', '-Ly', '300', '-Lz', '300', '-dx', '1', '-dy', '1', '-dz', '1', '-│
+-visualize', '-t', '200', '-dt', '0.005', '-c']                                                                                                               │
+Iter 0: time_seconds = 359.859048 mpts_p_sec = 15.005875300375942                                                                                             │
+Iter 1: time_seconds = 359.683804 mpts_p_sec = 15.013186415254884                                                                                             │
+Iter 2: time_seconds = 368.451193 mpts_p_sec = 14.655943860656736                                                                                             │
+Res(mesh_size=(300, 300, 300), n_timesteps=200, cuda_enable=True) = 15.013186415254884 mpts/sec                                                               │
+Running experiment euler cuda_enable = True mesh_size = (350, 350, 350) n_timesteps = 200 omp_threads = 8                                                     │
+Exec command:  ['/root/projs/cfdARCOV2/cfdARCO/scripts/../bin/cfdARCO_euler', '-Lx', '350', '-Ly', '350', '-Lz', '350', '-dx', '1', '-dy', '1', '-dz', '1', '-├
+-visualize', '-t', '200', '-dt', '0.005', '-c']                                                                                                               │
+Iter 0: time_seconds = 580.582807 mpts_p_sec = 14.769641637011135                                                                                             │
+Iter 1: time_seconds = 588.807214 mpts_p_sec = 14.563340591136166                                                                                             │
+Iter 2: time_seconds = 591.592582 mpts_p_sec = 14.494772688005071                                                                                             │
+Res(mesh_size=(350, 350, 350), n_timesteps=200, cuda_enable=True) = 14.769641637011135 mpts/sec                                                               │
+Running experiment euler cuda_enable = True mesh_size = (400, 400, 400) n_timesteps = 200 omp_threads = 8                                                     │
+Exec command:  ['/root/projs/cfdARCOV2/cfdARCO/scripts/../bin/cfdARCO_euler', '-Lx', '400', '-Ly', '400', '-Lz', '400', '-dx', '1', '-dy', '1', '-dz', '1', '-│
+-visualize', '-t', '200', '-dt', '0.005', '-c']                                                                                                               │
+Iter 0: time_seconds = 874.125922 mpts_p_sec = 14.643199198021266                                                                                             │
+Iter 1: time_seconds = 863.9383 mpts_p_sec = 14.815872846475262                                                                                               │
+Iter 2: time_seconds = 871.976275 mpts_p_sec = 14.67929847059199                                                                                              │
+Res(mesh_size=(400, 400, 400), n_timesteps=200, cuda_enable=True) = 14.815872846475262 mpts/sec                                                               │
+Running experiment euler cuda_enable = True mesh_size = (450, 450, 450) n_timesteps = 200 omp_threads = 8                                                     │
+Exec command:  ['/root/projs/cfdARCOV2/cfdARCO/scripts/../bin/cfdARCO_euler', '-Lx', '450', '-Ly', '450', '-Lz', '450', '-dx', '1', '-dy', '1', '-dz', '1', '-│
+-visualize', '-t', '200', '-dt', '0.005', '-c']                                                                                                               │
+Traceback (most recent call last):                                                                                                                            │
+  File "/root/projs/cfdARCOV2/cfdARCO/./scripts/benchmark_cfdarchov2.py", line 119, in <module>                                                               │
+    generate_report(args.out_file)                                                                                                                            │
+  File "/root/projs/cfdARCOV2/cfdARCO/./scripts/benchmark_cfdarchov2.py", line 89, in generate_report                                                         │
+    all_results = perform_full_benchmark()                                                                                                                    │
+  File "/root/projs/cfdARCOV2/cfdARCO/./scripts/benchmark_cfdarchov2.py", line 78, in perform_full_benchmark                                                  │
+    single_result = run_single_benchmark(bench_name = bench_name,                                                                                             │
+  File "/root/projs/cfdARCOV2/cfdARCO/./scripts/benchmark_cfdarchov2.py", line 57, in run_single_benchmark                                                    │
+    time_seconds = int(time_str_cuda) / 1000000                                                                                                               │
+ValueError: invalid literal for int() with base 10: '5.2972'                                                                                                  │

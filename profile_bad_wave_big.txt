@@ -1,0 +1,15 @@
+Eigen::nbThreads = 255
+Nodes set
+NUM NODES = 8400000
+Done mesh compute
+Setting CUDA device
+==PROF== Connected to process 113085 (/root/projs/cfdARCOV2/cfdARCO/bin/cfdARCO_heat)
+Kernel build
+==ERROR== ERR_NVGPUCTRPERM - The user does not have permission to access NVIDIA GPU Performance Counters on the target device 0. For instructions on enabling permissions and to get more information see https://developer.nvidia.com/ERR_NVGPUCTRPERM
+[>                                                 ] [00m:00s<00m:00s] 0.0 %[==========>                                       ] [00m:00s<00m:00s] 0.000000 %[====================>                             ] [00m:00s<00m:00s] 20.000000 %[==============================>                   ] [00m:00s<00m:00s] 40.000000 %[========================================>         ] [00m:00s<00m:00s] 60.000004 %At T Current sum = 8.39984e+06 Current max = 100
+Time progress = 0.0025
+
+Time difference = 143854[microseconds]
+==PROF== Disconnected from process 113085
+==WARNING== No kernels were profiled.
+==WARNING== Profiling kernels launched by child processes requires the --target-processes all option.

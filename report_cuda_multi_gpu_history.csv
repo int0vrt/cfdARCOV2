@@ -1,0 +1,6 @@
+,mesh_sizes,time_microseconds_cuda_single_gpu,time_microseconds_cuda_multi_gpu
+0,100,71088,772672
+1,100,68104,773536
+2,100,68067,771789
+3,100,68588,774031
+4,100,67913,771932

@@ -1,0 +1,42 @@
+/*
+cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
+Copyright (C) 2024 cfdARCHO
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+,experiment,mesh_size,num_points,cuda,omp_threads,n_timesteps,mpts
+0,euler,"(20, 20, 20)",8000,True,8,200,5.927484634848423
+1,euler,"(30, 30, 30)",27000,True,8,200,11.61647560432563
+2,euler,"(60, 60, 60)",216000,True,8,200,18.239730862637938
+3,euler,"(100, 100, 50)",500000,True,8,200,18.841251714789426
+4,euler,"(20, 20, 20)",8000,False,8,200,0.5147107550742438
+5,euler,"(30, 30, 30)",27000,False,8,200,0.47246086842857243
+6,euler,"(60, 60, 60)",216000,False,8,200,0.4266921670548429
+7,euler,"(100, 100, 50)",500000,False,8,200,0.4100756943141258
+8,heat,"(30, 30, 30)",27000,True,8,200,110.90345238339734
+9,heat,"(50, 50, 50)",125000,True,8,200,208.12001032275253
+10,heat,"(70, 70, 70)",343000,True,8,200,252.58475949217944
+11,heat,"(100, 100, 100)",1000000,True,8,200,278.14632165396927
+12,heat,"(30, 30, 30)",27000,False,8,200,28.422847758805823
+13,heat,"(50, 50, 50)",125000,False,8,200,22.81080173581077
+14,heat,"(70, 70, 70)",343000,False,8,200,26.471329350800293
+15,heat,"(100, 100, 100)",1000000,False,8,200,28.297236435295254
+16,wave,"(30, 30, 30)",27000,True,8,200,26.026354093367136
+17,wave,"(50, 50, 50)",125000,True,8,200,16.50764303872693
+18,wave,"(70, 70, 70)",343000,True,8,200,15.684341425706634
+19,wave,"(100, 100, 100)",1000000,True,8,200,13.765610201969032
+20,wave,"(30, 30, 30)",27000,False,8,200,12.935525984836689
+21,wave,"(50, 50, 50)",125000,False,8,200,9.784532845306927
+22,wave,"(70, 70, 70)",343000,False,8,200,10.060295781495068
+23,wave,"(100, 100, 100)",1000000,False,8,200,9.504230356692338

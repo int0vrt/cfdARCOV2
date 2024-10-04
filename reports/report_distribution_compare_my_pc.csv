@@ -1,0 +1,5 @@
+,mesh_path_df,times_ln_microseconds,times_cl_microseconds
+0,./dumps/strange_mesh2.json,105276545,100315917
+1,./dumps/strange_mesh3.json,44474917,43020163
+2,./dumps/strange_mesh.json,104093433,98697188
+3,./dumps/normal_mesh.json,313478457,291967143

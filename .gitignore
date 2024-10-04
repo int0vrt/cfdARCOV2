@@ -1,0 +1,5 @@
+__pycache__/
+.idea/
+not_to_upload/
+cmake-*/
+licence_header*

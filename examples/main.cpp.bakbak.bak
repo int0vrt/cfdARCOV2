@@ -1,0 +1,113 @@
+/*
+cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
+Copyright (C) 2024 cfdARCHO
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
+
+#include <iostream>
+#include <matplot/matplot.h>
+#include <chrono>
+#include <thread>
+
+#include "mesh2d.hpp"
+#include "fvm.hpp"
+#include "cfdarcho_main.hpp"
+
+
+Eigen::Matrix<float, -1, 1> initial_val(Mesh2D* mesh) {
+    Eigen::Matrix<float, -1, 1> ret = Eigen::Matrix<float, -1, 1>::Random(mesh->_num_nodes).cwiseAbs();
+    return ret;
+}
+
+
+Eigen::Matrix<float, -1, 1> boundary_copy(Mesh2D* mesh, Eigen::Matrix<float, -1, 1>& arr, Eigen::Matrix<float, -1, 1>& copy_var) {
+    for (int i = 0; i < mesh->_num_nodes; ++i) {
+        if (mesh->_nodes[i]->is_boundary()) {
+            arr(i) = copy_var(i);
+        }
+    }
+    return arr;
+}
+
+int main(int argc, char **argv) {
+    CFDArcoGlobalInit::initialize(argc, argv);
+
+    bool visualize = 1;
+
+    size_t L = 40;
+    size_t timesteps = 9000;
+    float CFL = 0.5;
+
+    auto mesh = Mesh2D{L, L, 2, 2};
+    mesh.init_basic_internals();
+    mesh.compute();
+
+    CFDArcoGlobalInit::make_node_distribution(&mesh);
+
+    auto u_initial = initial_val(&mesh);
+    auto u = Variable(&mesh,
+                          u_initial,
+                          [& u_initial] (Mesh2D* mesh, Eigen::Matrix<float, -1, 1>& arr) { return boundary_copy(mesh, arr, u_initial); },
+                          "u");
+
+    auto v_initial = initial_val(&mesh);
+    auto v = Variable(&mesh,
+                      v_initial,
+                      [& v_initial] (Mesh2D* mesh, Eigen::Matrix<float, -1, 1>& arr) { return boundary_copy(mesh, arr, v_initial); },
+                      "v");
+
+    std::vector<Variable*> space_vars {};
+    auto dt = DT(&mesh, [](float CFL, std::vector<Variable *> &space_vars, Mesh2D* mesh) { return .001; }, CFL, space_vars);
+
+    float a = 2.8e-4;
+    float b = 5e-3;
+    float tau = .1;
+    float k = -.005;
+
+    std::vector<std::tuple<Variable*, char, Variable>> equation_system = {
+            {d1t(u), '=', a * (d2dy(u) + d2dx(u)) + u - (u*u*u) - v + k},
+            {d1t(v), '=', (b * (d2dy(v) + d2dx(v)) + u - v) / tau}
+    };
+
+    auto equation = Equation(timesteps);
+
+    std::vector<Variable*> all_vars {&u, &v};
+
+    auto begin = std::chrono::steady_clock::now();
+    equation.evaluate(all_vars, equation_system, &dt, visualize);
+    auto end = std::chrono::steady_clock::now();
+    if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
+
+    if (visualize) {
+        int i = 0;
+        auto fig = matplot::figure(true);
+        for (auto& hist : u.history) {
+            i++;
+            if (i % 100 != 0) continue;
+            auto grid_hist = to_grid(&mesh, hist);
+            if (CFDArcoGlobalInit::get_rank() == 0) {
+                auto vect = from_eigen_matrix<float>(grid_hist);
+                fig->current_axes()->image(vect);
+                fig->draw();
+                std::this_thread::sleep_for(std::chrono::milliseconds {100});
+            }
+        }
+    }
+
+    CFDArcoGlobalInit::finalize();
+    return 0;
+}
