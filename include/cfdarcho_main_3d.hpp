@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,6 +21,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <vector>
 //#include <mesh3d.hpp>
 #include <filesystem>
+#include <thread>
+#include <tbb/concurrent_queue.h>
 
 //#include "decls.hpp"
 
@@ -30,9 +32,17 @@ enum class DistributionStrategy {
     Linear, Cluster
 };
 
+struct StoreInstance {
+    Eigen::Matrix<float, -1, 1> data_;
+    void* mesh_ptr_;
+    std::string name_;
+    int i_;
+    bool finalize_ = false;
+};
+
 class CFDArcoGlobalInit {
 public:
-    static void initialize(int argc, char **argv, bool skip_history_, const fs::path &store_path = "./dumps");
+    static void initialize(int argc, char **argv, int store_n_, const fs::path &store_path = "../dumps");
 
     static void finalize();
 
@@ -54,8 +64,15 @@ public:
     static bool cuda_enabled;
     static bool hip_enabled;
     static bool skip_history;
+    static int store_n;
     static bool store_stepping;
+    static bool use_pipe;
+    static int pipe_steps;
+    static int blocksize;
+    static int launch_sim_blocks;
     static fs::path store_dir;
+    static oneapi::tbb::concurrent_queue<StoreInstance> store_queue;
+    static std::thread store_thread;
 
     CFDArcoGlobalInit(CFDArcoGlobalInit &other) = delete;
 

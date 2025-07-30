@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 using MatrixX4dRB = Eigen::Matrix<float, -1, -1, Eigen::ColMajor>;
 using MatrixX6dRB = Eigen::Matrix<float, -1, -1, Eigen::ColMajor>;
 using MatrixX6Idx = Eigen::Matrix<size_t, -1, -1, Eigen::ColMajor>;
+using MatrixX6Idx32 = Eigen::Matrix<uint32_t, -1, -1, Eigen::ColMajor>;
 using MatrixX6SignIdx = Eigen::Matrix<ptrdiff_t, -1, -1, Eigen::ColMajor>;
 using TensorX6dRB = Eigen::Tensor<float, 3, Eigen::ColMajor>;
 

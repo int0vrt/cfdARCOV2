@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -47,6 +47,13 @@ CudaDataMatrixD div_mtrx(const CudaDataMatrixD &a, const CudaDataMatrixD &b);
 
 CudaDataMatrixD neg_mtrx(const CudaDataMatrixD &a);
 
+void add_mtrx_inp(CudaDataMatrixD &a, const CudaDataMatrixD &b);
+void sub_mtrx_inp(CudaDataMatrixD &a, const CudaDataMatrixD &b);
+void mul_mtrx_inp(CudaDataMatrixD &a, const CudaDataMatrixD &b);
+void mul_mtrx_inp(CudaDataMatrixD &a, float b);
+void div_mtrx_inp(CudaDataMatrixD &a, const CudaDataMatrixD &b);
+void neg_mtrx_inp(CudaDataMatrixD &a);
+
 CudaDataMatrixD rowwice_sum(const CudaDataMatrixD &a, int rows, int cols);
 
 CudaDataMatrixD mul_mtrx_rowwice(const CudaDataMatrixD &a, const CudaDataMatrixD &b, int rows, int cols);
@@ -59,14 +66,16 @@ CudaDataMatrixD get_col(const CudaDataMatrixD &a, int rows, int cols, int col_id
 
 CudaDataMatrixD div_const(const CudaDataMatrixD &a, float b);
 
-CudaDataMatrixD eval_grad2(CudaMesh3D* mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z);
+CudaDataMatrixD eval_grad2(CudaMesh3D *mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z);
 
-CudaDataMatrixD eval_grad(CudaMesh3D* mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z);
+CudaDataMatrixD eval_grad(CudaMesh3D *mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z);
 
-CudaDataMatrixD eval_stab(CudaMesh3D* mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z);
+CudaDataMatrixD eval_interp(CudaMesh3D *mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z, bool inv);
+
+CudaDataMatrixD eval_stab(CudaMesh3D *mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z);
 
 float cfl_cu(float dl, float gamma, const CudaDataMatrixD &p, const CudaDataMatrixD &rho, const CudaDataMatrixD &u,
-              const CudaDataMatrixD &v, const CudaDataMatrixD &w);
+             const CudaDataMatrixD &v, const CudaDataMatrixD &w);
 
 float cfl_cu(float dl, float gamma, const CudaDataMatrixD &p, const CudaDataMatrixD &rho, const CudaDataMatrixD &u);
 

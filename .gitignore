@@ -2,4 +2,14 @@ __pycache__/
 .idea/
 not_to_upload/
 cmake-*/
+build-*/
 licence_header*
+dumps/
+.vscode/
+build/
+bin/
+lib/
+dumps*/
+.cache*/
+vgcore.*
+scripts/*.gnuplot

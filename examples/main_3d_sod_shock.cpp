@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,158 +23,157 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <thread>
 #include <argparse/argparse.hpp>
 
-#include "mesh3d.hpp"
-#include "fvm3d.hpp"
+#include "operators.hpp"
+#include "equation.hpp"
 #include "utils3d.hpp"
 
+// ============================================================================
+// OPTIMIZED BOUNDARY CONDITIONS
+// ============================================================================
 
-Eigen::Matrix<float, -1, 1> initial_rho(Mesh3D* mesh) {
-    auto ret = Eigen::Matrix<float, -1, 1>{mesh->_num_nodes};
-    int i = 0;
-
-    float x_limit_lower = 0.5 * mesh->_lx;
-
-    for (auto& node : mesh->_nodes) {
-        if (x_limit_lower < node->x()) {
-            ret(i) = 1;
-        } else {
-            ret(i) = 0.125;
-        }
-        ++i;
-    }
-    return ret;
+// CPU version - zero gradient boundary condition
+Eigen::Matrix<float, -1, 1> zero_gradient_bc(Mesh3D *mesh, Eigen::Matrix<float, -1, 1> &arr, const DT *dt_) {
+    return arr.cwiseProduct(mesh->_node_is_boundary_reverse);
 }
 
-
-Eigen::Matrix<float, -1, 1> initial_p(Mesh3D* mesh) {
-    auto ret = Eigen::Matrix<float, -1, 1>{mesh->_num_nodes};
-    int i = 0;
-
-    float x_limit_lower = 0.5 * mesh->_lx;
-
-    for (auto& node : mesh->_nodes) {
-        if (x_limit_lower < node->x()) {
-            ret(i) = 1;
-        } else {
-            ret(i) = 0.1;
-        }
-        ++i;
-    }
-    return ret;
+// CUDA version - zero gradient boundary condition
+CudaDataMatrixD zero_gradient_bc_cu(Mesh3D *mesh, CudaDataMatrixD &arr, const DT *dt_) {
+    auto *cuda_mesh = dynamic_cast<CudaMesh3D *>(mesh);
+    return arr * cuda_mesh->_node_is_boundary_reverse_cu;
 }
 
-Eigen::Matrix<float, -1, 1> boundary_none(Mesh3D* mesh, Eigen::Matrix<float, -1, 1>& arr, const DT* dt_) {
+// CPU version - no boundary condition (for internal variables)
+Eigen::Matrix<float, -1, 1> no_bc(Mesh3D *mesh, Eigen::Matrix<float, -1, 1> &arr, const DT *dt_) {
     return arr;
 }
 
-Eigen::Matrix<float, -1, 1> _boundary_copy_2d_via_3d(Mesh3D* mesh, Eigen::Matrix<float, -1, 1>& arr, const Eigen::Matrix<float, -1, 1>& copy_var) {
-    auto ret = Eigen::Matrix<float, -1, 1>{mesh->_num_nodes};
-    int i = 0;
+// CUDA version - no boundary condition (for internal variables)
+CudaDataMatrixD no_bc_cu(Mesh3D *mesh, CudaDataMatrixD &arr, const DT *dt_) {
+    return arr;
+}
 
-    float x_limit_lower = mesh->_dx + 0.001;
-    float x_limit_upper = mesh->_lx - mesh->_dx - 0.001;
+// ============================================================================
+// OPTIMIZED INITIAL CONDITIONS
+// ============================================================================
 
-//    for (auto& node : mesh->_nodes) {
-//        if (node->_id == 0 || node->_id == mesh->_num_nodes - 1) {
-////        if (x_limit_lower < node->x() && node->x() < x_limit_upper) {
-////        if (node->is_boundary_x()) {
-//            ret(i) = copy_var(i);
-//        } else {
-//            ret(i) = arr(i);
-//        }
-//        ++i;
-//    }
-
-    for (auto& node : mesh->_nodes) {
-        if (node->_id == 0) {
-            ret(node->_id) = arr(node->_id + 1);
-        } else if (node->_id == mesh->_num_nodes - 1) {
-            ret(node->_id) = arr(node->_id - 1);
-        } else {
-            ret(node->_id) = arr(node->_id);
+// Pre-compute initial conditions for SOD shock tube
+struct SodInitialConditions {
+    Eigen::Matrix<float, -1, 1> rho_init;
+    Eigen::Matrix<float, -1, 1> p_init;
+    Eigen::Matrix<float, -1, 1> u_init;
+    
+    SodInitialConditions(Mesh3D *mesh) {
+        rho_init = Eigen::Matrix<float, -1, 1>{mesh->_num_nodes};
+        p_init = Eigen::Matrix<float, -1, 1>{mesh->_num_nodes};
+        u_init = Eigen::Matrix<float, -1, 1>{mesh->_num_nodes};
+        
+        float x_limit_lower = 0.5 * mesh->_lx;
+        
+        for (int i = 0; i < mesh->_num_nodes; ++i) {
+            auto& node = mesh->_nodes[i];
+            
+            if (x_limit_lower < node.x()) {
+                rho_init(i) = 1.0f;    // High density region
+                p_init(i) = 1.0f;      // High pressure region
+            } else {
+                rho_init(i) = 0.125f;  // Low density region
+                p_init(i) = 0.1f;      // Low pressure region
+            }
+            u_init(i) = 0.0f;          // Zero initial velocity
         }
-        ++i;
     }
+};
 
-    return ret;
-}
-
-auto boundary_copy(const Eigen::Matrix<float, -1, 1>& copy_var) {
-    return [copy_var] (Mesh3D* mesh, Eigen::Matrix<float, -1, 1>& arr, const DT* dt_) { return _boundary_copy_2d_via_3d(mesh, arr, copy_var); };
-}
 int main(int argc, char **argv) {
     SingleLibInitializer3D initializer{argc, argv};
     auto mesh = initializer.mesh;
     auto timesteps = initializer.timesteps;
 
-    auto rho_initial = initial_rho(mesh.get());
-    auto rho = Variable(mesh.get(), rho_initial, boundary_copy(rho_initial), "rho");
-//    auto rho = Variable(mesh.get(), rho_initial, boundary_none, "rho");
+    // Pre-compute initial conditions for optimized performance
+    SodInitialConditions init_conditions(mesh.get());
+    
+    // Create variables with optimized boundary conditions
+    auto rho = Variable(mesh.get(), init_conditions.rho_init, zero_gradient_bc, zero_gradient_bc_cu, "rho");
+    auto u = Variable(mesh.get(), init_conditions.u_init, zero_gradient_bc, zero_gradient_bc_cu, "u");
+    auto p = Variable(mesh.get(), init_conditions.p_init, zero_gradient_bc, zero_gradient_bc_cu, "p");
 
-    Eigen::Matrix<float, -1, 1> u_initial = Eigen::Matrix<float, -1, 1>{mesh->_num_nodes};
-    u_initial.setConstant(0);
-    auto u = Variable(mesh.get(), u_initial, boundary_copy(u_initial), "u");
-//    auto u = Variable(mesh.get(), u_initial, boundary_none, "u");
-
-    auto p_initial = initial_p(mesh.get());
-    auto p = Variable(mesh.get(), p_initial, boundary_copy(p_initial), "p");
-//    auto p = Variable(mesh.get(), p_initial, boundary_none, "p");
-
+    // Compute derived variables
     Eigen::Matrix<float, -1, 1> mass_initial = rho.current.array() * mesh->_volumes.array();
-    auto mass = Variable(mesh.get(), mass_initial, boundary_copy(mass_initial), "mass");
-//    auto mass = Variable(mesh.get(), mass_initial, boundary_none, "mass");
+    auto mass = Variable(mesh.get(), mass_initial, zero_gradient_bc, zero_gradient_bc_cu, "mass");
 
     Eigen::Matrix<float, -1, 1> rho_u_initial = rho.current.array() * u.current.array() * mesh->_volumes.array();
-    auto rho_u = Variable(mesh.get(), rho_u_initial, boundary_copy(rho_u_initial), "rho_u");
-//    auto rho_u = Variable(mesh.get(), rho_u_initial, boundary_none, "rho_u");
+    auto rho_u = Variable(mesh.get(), rho_u_initial, zero_gradient_bc, zero_gradient_bc_cu, "rho_u");
 
-//    float gamma = 5. / 3.;
-    float gamma = 1.4;
+    float gamma = 1.4f;  // Specific heat ratio for air
 
     auto E = p / (gamma - 1) + 0.5 * rho * ((u * u));
-    Eigen::Matrix<float, -1, 1> E_initial = (p.current.array() / (gamma - 1) + 0.5 * rho.current.array() * (u.current.array() * u.current.array())) * mesh->_volumes.array();
-    auto rho_e = Variable(mesh.get(), E_initial, boundary_copy(E_initial), "rho_e");
-//    auto rho_e = Variable(mesh.get(), E_initial, boundary_none, "rho_e");
+    Eigen::Matrix<float, -1, 1> E_initial =
+            (p.current.array() / (gamma - 1) + 0.5 * rho.current.array() * (u.current.array() * u.current.array())) *
+            mesh->_volumes.array();
+    auto rho_e = Variable(mesh.get(), E_initial, zero_gradient_bc, zero_gradient_bc_cu, "rho_e");
 
-    auto mass_tmp = Variable(mesh.get(), mass_initial,   boundary_none, "mass_tmp");
-    auto rho_u_tmp = Variable(mesh.get(), rho_u_initial, boundary_none, "rho_u_tmp");
-    auto rho_e_tmp = Variable(mesh.get(), E_initial,     boundary_none, "rho_e_tmp");
+    // Temporary variables for internal computations (no boundary conditions needed)
+    auto mass_tmp = Variable(mesh.get(), mass_initial, no_bc, no_bc_cu, "mass_tmp");
+    auto rho_u_tmp = Variable(mesh.get(), rho_u_initial, no_bc, no_bc_cu, "rho_u_tmp");
+    auto rho_e_tmp = Variable(mesh.get(), E_initial, no_bc, no_bc_cu, "rho_e_tmp");
 
-    std::vector<Variable*> space_vars {&u, &p, &rho};
-    auto dt = DT(mesh.get(), UpdatePolicies::CourantFriedrichsLewy1D, UpdatePolicies::CourantFriedrichsLewy1DCu,  initializer.dt, space_vars);
-//    auto dt = DT(mesh.get(), UpdatePolicies::constant_dt, UpdatePolicies::constant_dt_cu,  initializer.dt, space_vars);
+    std::vector<Variable *> space_vars{&u, &p, &rho};
+    auto dt = DT(mesh.get(), UpdatePolicies::CourantFriedrichsLewy1D, UpdatePolicies::CourantFriedrichsLewy1DCu,
+                 initializer.dt, space_vars);
 
-    auto volumes_var = Variable(mesh.get(), mesh->_volumes, boundary_none, "volumes_var");
+    auto volumes_var = Variable(mesh.get(), mesh->_volumes, no_bc, no_bc_cu, "volumes_var");
 
-    float dissip = 2;
+    float dissip = 2.0f;  // Artificial dissipation coefficient
+    
+    // SOD shock tube equations using kernel building
     EquationTemplate equation_system = {
-            {&rho,        '=', mass / volumes_var, true},
-            {&u,          '=', rho_u / rho / volumes_var, true},
-            {&p,          '=', (rho_e / volumes_var - 0.5 * rho * (u * u)) * (gamma - 1), true},
+        // FUSED KERNEL: Primitive variable reconstruction
+        NEntryVar{
+            {&rho, '=', mass / volumes_var, true},
+            {&u, '=', rho_u / rho / volumes_var, true},
+            {&p, '=', (rho_e / volumes_var - 0.5 * rho * (u * u)) * (gamma - 1), true}
+        }.restruct(),
 
-            {&rho,    '=', rho - 0.5 * dt * (u * d1dx(rho) + rho * d1dx(u)), true},
-            {&u,      '=', u   - 0.5 * dt * (u * d1dx(u) + (1 / rho) * d1dx(p)), true},
-            {&p,      '=', p   - 0.5 * dt * (gamma * p * (d1dx(u)) + u * d1dx(p)), true},
+        // FUSED KERNEL: Predictor step (first-order accurate)
+        NEntryVar{
+            {&rho, '=', rho - 0.5 * dt * (u * d1dx(rho) + rho * d1dx(u)), true},
+            {&u, '=', u - 0.5 * dt * (u * d1dx(u) + (1 / rho) * d1dx(p)), true},
+            {&p, '=', p - 0.5 * dt * (gamma * p * (d1dx(u)) + u * d1dx(p)), true}
+        }.restruct(),
 
-            {&mass_tmp,  '=', 0 * mass_tmp -  (d1dx(rho * u)), true},
+        // FUSED KERNEL: Flux computation
+        NEntryVar{
+            {&mass_tmp, '=', 0 * mass_tmp - (d1dx(rho * u)), true},
             {&rho_u_tmp, '=', 0 * rho_u_tmp - (d1dx(rho * u * u + p)), true},
-            {&rho_e_tmp, '=', 0 * rho_e_tmp - (d1dx((E + p) * u)), true},
+            {&rho_e_tmp, '=', 0 * rho_e_tmp - (d1dx((E + p) * u)), true}
+        }.restruct(),
 
-            {d1t(mass),  '=', mass_tmp -  stabx(rho) * dissip, false},
+        // FUSED KERNEL: Corrector step with artificial dissipation
+        NEntryVar{
+            {d1t(mass), '=', mass_tmp - stabx(rho) * dissip, false},
             {d1t(rho_u), '=', rho_u_tmp - stabx(rho * u) * dissip, false},
-            {d1t(rho_e), '=', rho_e_tmp - stabx(E) * dissip, false},
-
+            {d1t(rho_e), '=', rho_e_tmp - stabx(E) * dissip, false}
+        }.restruct()
     };
 
     auto equation = Equation(timesteps);
     initializer.init_store({&rho, &u, &p});
 
-    std::vector<Variable*> all_vars {&rho, &u, &p, &mass, &rho_u, &rho_e};
+    std::vector<Variable *> all_vars{&rho, &u, &p, &mass, &rho_u, &rho_e, &mass_tmp, &rho_u_tmp, &rho_e_tmp, &volumes_var};
 
     auto begin = std::chrono::steady_clock::now();
     equation.evaluate(all_vars, equation_system, &dt, initializer.visualize, {&rho, &u, &p});
     auto end = std::chrono::steady_clock::now();
-    if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
+    
+    if (CFDArcoGlobalInit::get_rank() == 0) {
+        std::cout << "\nSOD Shock Tube Simulation Completed!" << std::endl;
+        std::cout << "Specific heat ratio (γ) = " << gamma << std::endl;
+        std::cout << "Artificial dissipation = " << dissip << std::endl;
+        std::cout << "Boundary condition: Zero gradient (outflow)" << std::endl;
+        std::cout << "Expected features: Shock wave, contact discontinuity, rarefaction fan" << std::endl;
+        std::cout << "Time elapsed = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()
+                  << " [us]" << std::endl;
+    }
 
     initializer.finalize();
     return 0;

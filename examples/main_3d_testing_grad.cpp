@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,15 +24,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <thread>
 #include <argparse/argparse.hpp>
 
-#include "mesh3d.hpp"
-#include "fvm3d.hpp"
+#include "operators.hpp"
+#include "equation.hpp"
 #include "utils3d.hpp"
 
-Eigen::Matrix<float, -1, 1> boundary_none(Mesh3D* mesh, Eigen::Matrix<float, -1, 1>& arr) {
+Eigen::Matrix<float, -1, 1> boundary_none(Mesh3D *mesh, Eigen::Matrix<float, -1, 1> &arr) {
     return arr;
 }
 
-Eigen::Matrix<float, -1, 1> initial_range(Mesh3D* mesh) {
+Eigen::Matrix<float, -1, 1> initial_range(Mesh3D *mesh) {
     auto ret = Eigen::Matrix<float, -1, 1>{mesh->_num_nodes};
     for (int x = 0; x < mesh->_x; ++x) {
         for (int y = 0; y < mesh->_y; ++y) {
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
 
     auto rho_initial = initial_range(mesh.get());
     auto rho = Variable(mesh.get(), rho_initial, boundary_none, "rho");
-    auto der = Grad2Var(&rho, true, false, false );
+    auto der = Grad2Var(&rho, true, false, false);
 //    auto stb = StabVar(&rho, false, false, true);
     auto calc = der.evaluate();
 //    auto calc_stb = stb.evaluate();

@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,16 +15,14 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-//
-// Created by yevhen on 7/17/24.
-//
+
 
 #ifndef CFDARCO_UTILS3D_HPP
 #define CFDARCO_UTILS3D_HPP
 
 #include "argparse/argparse.hpp"
 #include "mesh3d.hpp"
-#include "fvm3d.hpp"
+#include "equation.hpp"
 #include "cfdarcho_main_3d.hpp"
 #include "io_operators_tmpl.hpp"
 
@@ -69,7 +67,9 @@ inline argparse::ArgumentParser parse_args_base(int argc, char **argv) {
     program.add_argument("--cuda_ranks")
             .default_value(1)
             .scan<'i', int>();
-    program.add_argument("-s", "--store").default_value(false).implicit_value(true);
+    program.add_argument("-s", "--store")
+            .default_value(0)
+            .scan<'i', int>();
     program.add_argument("-st", "--store_stepping").default_value(false).implicit_value(true);
     program.add_argument("-sl", "--store_last").default_value(false).implicit_value(true);
     program.add_argument("--skip_history").default_value(false).implicit_value(true);
@@ -82,7 +82,16 @@ inline argparse::ArgumentParser parse_args_base(int argc, char **argv) {
     program.add_argument("--strange_mesh").default_value(false).implicit_value(true);
     program.add_argument("-m", "--mesh")
             .default_value(std::string(""));
-
+    program.add_argument("-ps", "--pipe_steps")
+            .default_value(1)
+            .scan<'i', int>();
+    program.add_argument("-ls", "--launch_sim_blocks")
+            .default_value(2)
+            .scan<'i', int>();
+    program.add_argument("-b", "--blocksize")
+            .default_value(64)
+            .scan<'i', int>();
+    program.add_argument("-p", "--use_pipe").default_value(false).implicit_value(true);
 
     try {
         program.parse_args(argc, argv);
@@ -113,7 +122,7 @@ public:
     bool hip_enable;
     bool store_stepping;
     bool store_last;
-    bool store;
+    int store;
     std::vector<size_t> priorities;
     std::shared_ptr<Mesh3D> mesh;
     std::vector<Variable *> store_vars;
@@ -123,7 +132,7 @@ public:
         auto program = parse_args_base(argc, argv);
 
 //        CFDArcoGlobalInit::initialize(argc, argv, program.get<bool>("skip_history"));
-        CFDArcoGlobalInit::initialize(argc, argv, !(program.get<bool>("store")));
+        CFDArcoGlobalInit::initialize(argc, argv, program.get<int>("store"));
 
         visualize = program.get<bool>("visualize");
         create_plot = program.get<bool>("create_plot");
@@ -140,7 +149,11 @@ public:
         hip_enable = program.get<bool>("hip_enable");
         store_stepping = program.get<bool>("store_stepping");
         store_last = program.get<bool>("store_last");
-        store = program.get<bool>("store");
+        store = program.get<int>("store");
+        CFDArcoGlobalInit::pipe_steps = program.get<int>("pipe_steps");
+        CFDArcoGlobalInit::use_pipe = program.get<bool>("use_pipe");
+        CFDArcoGlobalInit::launch_sim_blocks = program.get<int>("launch_sim_blocks");
+        CFDArcoGlobalInit::blocksize = program.get<int>("blocksize");
 
         if (cuda_enable && hip_enable) {
             throw std::runtime_error{"Can`t run HIP and CUDA simultaneously"};
@@ -158,29 +171,32 @@ public:
             mesh->compute();
         }
 
-        DistributionStrategy dist;
-        auto dist_str = program.get<std::string>("dist");
-        if (dist_str == "cl") {
-            dist = DistributionStrategy::Cluster;
-        } else if (dist_str == "ln") {
-            dist = DistributionStrategy::Linear;
-        } else {
-            std::cerr << "unknown dist strategy: " << dist_str << std::endl;
-            std::exit(1);
-        }
+//        DistributionStrategy dist;
+//        auto dist_str = program.get<std::string>("dist");
+//        if (dist_str == "cl") {
+//            dist = DistributionStrategy::Cluster;
+//        } else if (dist_str == "ln") {
+//            dist = DistributionStrategy::Linear;
+//        } else {
+//            std::cerr << "unknown dist strategy: " << dist_str << std::endl;
+//            std::exit(1);
+//        }
 
         priorities = program.get<std::vector<size_t>>("priorities");
 //        CFDArcoGlobalInit::make_node_distribution(mesh.get(), dist, priorities);
-        if ((cuda_enable || hip_enable) && CFDArcoGlobalInit::get_rank() < program.get<int>("cuda_ranks") ) {
+        if ((cuda_enable || hip_enable) && CFDArcoGlobalInit::get_rank() < program.get<int>("cuda_ranks")) {
             CFDArcoGlobalInit::enable_cuda(program.get<int>("cuda_ranks"), cuda_enable, hip_enable);
-            dynamic_cast<CudaMesh3D*>(mesh.get())->host_to_device();
+            dynamic_cast<CudaMesh3D *>(mesh.get())->host_to_device();
         }
 
     }
 
     void init_store(const std::vector<Variable *> &vars_to_store) {
         store_vars = vars_to_store;
-//        if (store_stepping) init_store_history_stepping(vars_to_store, mesh.get());
+        if (store_stepping) {
+            std::cout << "INIT store stepping" << std::endl;
+            init_store_history_stepping(vars_to_store);
+        }
     }
 
     void finalize() {
@@ -195,7 +211,7 @@ public:
 
         if (store) {
             if (store_stepping) {
-//                finalize_history_stepping();
+                finalize_history_stepping();
             } else {
                 store_history(store_vars, mesh.get());
             }

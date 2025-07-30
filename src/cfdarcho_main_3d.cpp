@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -30,7 +30,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "jit_config.h"
 
 #if USE_GPU
+
 #include <occa.hpp>
+
 #endif
 
 namespace fs = std::filesystem;
@@ -42,13 +44,23 @@ namespace fs = std::filesystem;
 //std::vector<std::vector<size_t>> CFDArcoGlobalInit::current_proc_node_send_distribution = {};
 //std::vector<std::vector<size_t>> CFDArcoGlobalInit::current_proc_node_receive_distribution = {};
 //Mesh3D *CFDArcoGlobalInit::mesh = nullptr;
+
+void empty_fn() {}
+
 int CFDArcoGlobalInit::world_size = 0;
 int CFDArcoGlobalInit::world_rank = 0;
 bool CFDArcoGlobalInit::skip_history = false;
+int CFDArcoGlobalInit::store_n = 0;
 bool CFDArcoGlobalInit::cuda_enabled = false;
 bool CFDArcoGlobalInit::hip_enabled = false;
 bool CFDArcoGlobalInit::store_stepping = false;
+bool CFDArcoGlobalInit::use_pipe = false;
+int CFDArcoGlobalInit::pipe_steps = 1;
+int CFDArcoGlobalInit::blocksize = 64;
+int CFDArcoGlobalInit::launch_sim_blocks = 2;
 fs::path CFDArcoGlobalInit::store_dir = {};
+oneapi::tbb::concurrent_queue<StoreInstance> CFDArcoGlobalInit::store_queue = {};
+std::thread CFDArcoGlobalInit::store_thread{empty_fn};
 
 void CFDArcoGlobalInit::finalize() {
 //    MPI_Finalize();
@@ -59,6 +71,10 @@ void CFDArcoGlobalInit::finalize() {
         Allocator::allocator_alive = false;
     }
 #endif
+
+    if (!CFDArcoGlobalInit::store_stepping) {
+        CFDArcoGlobalInit::store_thread.join();
+    }
 }
 
 
@@ -273,14 +289,16 @@ rmm::mr::cuda_memory_resource *get_cuda_resource() {
 
 #endif
 
-void CFDArcoGlobalInit::initialize(int argc, char **argv, bool skip_history_, const fs::path &store_path) {
+void CFDArcoGlobalInit::initialize(int argc, char **argv, int store_n_, const fs::path &store_path) {
     world_size = 0;
     world_rank = 0;
-    skip_history = skip_history_;
+    store_n = store_n_;
+    skip_history = store_n_ == 0;
 //    mesh = nullptr;
 
 //    Eigen::setNbThreads(8);
-    std::cout << "Eigen::nbThreads = "  << Eigen::nbThreads() << std::endl;
+    Eigen::initParallel();
+    std::cout << "Eigen::nbThreads = " << Eigen::nbThreads() << std::endl;
 
 //    MPI_Init(&argc, &argv);
 //    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
@@ -314,14 +332,14 @@ void CFDArcoGlobalInit::enable_cuda(int cuda_ranks, bool use_cuda, bool use_hip)
 
     if (use_cuda) {
         std::cout << "Setting CUDA device" << std::endl;
-         occa::setDevice({{"mode", "CUDA"},
-                     {"device_id", 0}
-                    });
+        occa::setDevice({{"mode",      "CUDA"},
+                         {"device_id", 0}
+                        });
     } else if (use_hip) {
         std::cout << "Setting HIP device" << std::endl;
-         occa::setDevice({{"mode", "HIP"},
-             {"device_id", 0}
-            });
+        occa::setDevice({{"mode",      "HIP"},
+                         {"device_id", 0}
+                        });
     } else {
         throw std::runtime_error{"!use_cuda and !use_hip"};
     }

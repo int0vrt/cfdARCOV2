@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -40,6 +40,12 @@ CudaDataMatrixD add_mtrx(const CudaDataMatrixD &a, const CudaDataMatrixD &b) {
     return res;
 }
 
+void add_mtrx_inp(CudaDataMatrixD &a, const CudaDataMatrixD &b) {
+    int blocksize = BLOCK_SIZE;
+    int nblocks = std::ceil(static_cast<float>(a._size) / static_cast<float>(blocksize));
+    add_mtrx_k<<<nblocks, blocksize>>>(a.data.get(), b.data.get(), a.data.get(), a._size);
+}
+
 __global__ void sub_mtrx_k(const float *a, const float *b, float *c, int n) {
     auto idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
@@ -54,6 +60,12 @@ CudaDataMatrixD sub_mtrx(const CudaDataMatrixD &a, const CudaDataMatrixD &b) {
     sub_mtrx_k<<<nblocks, blocksize>>>(a.data.get(), b.data.get(), res.data.get(), a._size);
 
     return res;
+}
+
+void sub_mtrx_inp(CudaDataMatrixD &a, const CudaDataMatrixD &b) {
+    int blocksize = BLOCK_SIZE;
+    int nblocks = std::ceil(static_cast<float>(a._size) / static_cast<float>(blocksize));
+    sub_mtrx_k<<<nblocks, blocksize>>>(a.data.get(), b.data.get(), a.data.get(), a._size);
 }
 
 __global__ void mul_mtrx_k(const float *a, const float *b, float *c, int n) {
@@ -72,6 +84,12 @@ CudaDataMatrixD mul_mtrx(const CudaDataMatrixD &a, const CudaDataMatrixD &b) {
     return res;
 }
 
+void mul_mtrx_inp(CudaDataMatrixD &a, const CudaDataMatrixD &b) {
+    int blocksize = BLOCK_SIZE;
+    int nblocks = std::ceil(static_cast<float>(a._size) / static_cast<float>(blocksize));
+    mul_mtrx_k<<<nblocks, blocksize>>>(a.data.get(), b.data.get(), a.data.get(), a._size);
+}
+
 __global__ void mul_mtrx_by_float_k(const float *a, float b, float *c, int n) {
     auto idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
@@ -85,6 +103,12 @@ CudaDataMatrixD mul_mtrx(const CudaDataMatrixD &a, const float b) {
     CudaDataMatrixD res{a._size};
     mul_mtrx_by_float_k<<<nblocks, blocksize>>>(a.data.get(), b, res.data.get(), a._size);
     return res;
+}
+
+void mul_mtrx_inp(CudaDataMatrixD &a, const float b) {
+    int blocksize = BLOCK_SIZE;
+    int nblocks = std::ceil(static_cast<float>(a._size) / static_cast<float>(blocksize));
+    mul_mtrx_by_float_k<<<nblocks, blocksize>>>(a.data.get(), b, a.data.get(), a._size);
 }
 
 __global__ void div_mtrx_k(const float *a, const float *b, float *c, int n) {
@@ -103,6 +127,12 @@ CudaDataMatrixD div_mtrx(const CudaDataMatrixD &a, const CudaDataMatrixD &b) {
     return res;
 }
 
+void div_mtrx_inp(CudaDataMatrixD &a, const CudaDataMatrixD &b) {
+    int blocksize = BLOCK_SIZE;
+    int nblocks = std::ceil(static_cast<float>(a._size) / static_cast<float>(blocksize));
+    div_mtrx_k<<<nblocks, blocksize>>>(a.data.get(), b.data.get(), a.data.get(), a._size);
+}
+
 __global__ void div_const_k(const float *a, const float b, float *c, int n) {
     auto idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
@@ -117,6 +147,12 @@ CudaDataMatrixD div_const(const CudaDataMatrixD &a, const float b) {
     div_const_k<<<nblocks, blocksize>>>(a.data.get(), b, res.data.get(), a._size);
 
     return res;
+}
+
+void div_const_inp(CudaDataMatrixD &a, const float b) {
+    int blocksize = BLOCK_SIZE;
+    int nblocks = std::ceil(static_cast<float>(a._size) / static_cast<float>(blocksize));
+    div_const_k<<<nblocks, blocksize>>>(a.data.get(), b, a.data.get(), a._size);
 }
 
 __global__ void neg_mtrx_k(const float *a, float *c, int n) {
@@ -135,15 +171,21 @@ CudaDataMatrixD neg_mtrx(const CudaDataMatrixD &a) {
     return res;
 }
 
+void neg_mtrx_inp(CudaDataMatrixD &a) {
+    int blocksize = BLOCK_SIZE;
+    int nblocks = std::ceil(static_cast<float>(a._size) / static_cast<float>(blocksize));
+    neg_mtrx_k<<<nblocks, blocksize>>>(a.data.get(), a.data.get(), a._size);
+}
+
 __global__ void cfl_cu_k(
         float dl, float gamma,
-        const float * __restrict__ p_in,
-        const float * __restrict__ rho_in,
-        const float * __restrict__ u_in,
-        const float * __restrict__ v_in,
-        const float * __restrict__ w_in,
+        const float *__restrict__ p_in,
+        const float *__restrict__ rho_in,
+        const float *__restrict__ u_in,
+        const float *__restrict__ v_in,
+        const float *__restrict__ w_in,
         int rows,
-        float * __restrict__ value_memory
+        float *__restrict__ value_memory
 ) {
     auto idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -162,7 +204,7 @@ __global__ void cfl_cu_k(
 }
 
 float cfl_cu(float dl, float gamma, const CudaDataMatrixD &p, const CudaDataMatrixD &rho, const CudaDataMatrixD &u,
-              const CudaDataMatrixD &v, const CudaDataMatrixD &w) {
+             const CudaDataMatrixD &v, const CudaDataMatrixD &w) {
     int rows = p._size;
     int blocksize = BLOCK_SIZE;
     int nblocks = std::ceil(static_cast<float>(rows) / static_cast<float>(blocksize));
@@ -190,11 +232,11 @@ float cfl_cu(float dl, float gamma, const CudaDataMatrixD &p, const CudaDataMatr
 
 __global__ void cfl_cu_k(
         float dl, float gamma,
-        const float * __restrict__ p_in,
-        const float * __restrict__ rho_in,
-        const float * __restrict__ u_in,
+        const float *__restrict__ p_in,
+        const float *__restrict__ rho_in,
+        const float *__restrict__ u_in,
         int rows,
-        float * __restrict__ value_memory
+        float *__restrict__ value_memory
 ) {
     auto idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -235,23 +277,23 @@ float cfl_cu(float dl, float gamma, const CudaDataMatrixD &p, const CudaDataMatr
 }
 
 template<typename MeshClass>
-__global__ void eval_grad_k(const float * __restrict__ var_ptr,
-                          const size_t * __restrict__ ids_ptr,
-                          const float * __restrict__ normals_x_ptr,
-                          const float * __restrict__ normals_y_ptr,
-                          const float * __restrict__ normals_z_ptr,
-                          const float * __restrict__ face_area_ptr,
-                          const float * __restrict__ volume_ptr,
-                          float * __restrict__ ret_ptr,
-                          bool clc_x, bool clc_y, bool clc_z,
-                          size_t n) {
+__global__ void eval_grad_k(const float *__restrict__ var_ptr,
+                            const size_t *__restrict__ ids_ptr,
+                            const float *__restrict__ normals_x_ptr,
+                            const float *__restrict__ normals_y_ptr,
+                            const float *__restrict__ normals_z_ptr,
+                            const float *__restrict__ face_area_ptr,
+                            const float *__restrict__ volume_ptr,
+                            float *__restrict__ ret_ptr,
+                            bool clc_x, bool clc_y, bool clc_z,
+                            size_t n) {
 
     float interpolation_ret[MeshClass::n_faces];
     size_t face_neigh_ids[MeshClass::n_faces];
     float face_area[MeshClass::n_faces];
     float var_neigh[MeshClass::n_faces];
     float normals_face[MeshClass::n_dims][MeshClass::n_faces];
-    const float* normals_ptr[MeshClass::n_dims] = {
+    const float *normals_ptr[MeshClass::n_dims] = {
             normals_x_ptr,
             normals_y_ptr,
             normals_z_ptr
@@ -282,7 +324,43 @@ __global__ void eval_grad_k(const float * __restrict__ var_ptr,
     }
 }
 
-CudaDataMatrixD eval_grad(CudaMesh3D* mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z) {
+template<typename MeshClass>
+__global__ void eval_interp_k(const float *__restrict__ var_ptr,
+                            const size_t *__restrict__ ids_ptr,
+                            float *__restrict__ ret_ptr,
+                            bool clc_x, bool clc_y, bool clc_z,
+                            bool inv,
+                            size_t n) {
+
+    float interpolation_ret[MeshClass::n_faces];
+    size_t face_neigh_ids[MeshClass::n_faces];
+    float var_neigh[MeshClass::n_faces];
+
+    auto idx = (size_t) blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        float crr = read_scalar_from_self(var_ptr, idx, n);
+
+        read_n_vars_from_self<MeshClass::n_faces>(ids_ptr, face_neigh_ids, idx, n);
+        read_n_vars_from_neigh<MeshClass>(var_ptr, face_neigh_ids, var_neigh);
+        interpolate_to_face_linear_cu_k<MeshClass>(crr, var_neigh, interpolation_ret);
+
+        float accum[1];
+        accum[0] = 0.0;
+        if (!inv) {
+            if (clc_x) accum[0] += interpolation_ret[0];
+            if (clc_y) accum[0] += interpolation_ret[2];
+            if (clc_z) accum[0] += interpolation_ret[4];
+        } else {
+            if (clc_x) accum[0] += interpolation_ret[1];
+            if (clc_y) accum[0] += interpolation_ret[3];
+            if (clc_z) accum[0] += interpolation_ret[5];
+        }
+        accum[0] /= ((int) clc_x + (int) clc_y + (int) clc_z);
+        write_n_vars_to_self<1>(ret_ptr, accum, idx, n);
+    }
+}
+
+CudaDataMatrixD eval_grad(CudaMesh3D *mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z) {
     int blocksize = BLOCK_SIZE;
     int nblocks = std::ceil(static_cast<float>(a._size) / static_cast<float>(blocksize));
     CudaDataMatrixD res{a._size};
@@ -304,20 +382,36 @@ CudaDataMatrixD eval_grad(CudaMesh3D* mesh, const CudaDataMatrixD &a, bool clc_x
     return res;
 }
 
+CudaDataMatrixD eval_interp(CudaMesh3D *mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z, bool inv) {
+    int blocksize = BLOCK_SIZE;
+    int nblocks = std::ceil(static_cast<float>(a._size) / static_cast<float>(blocksize));
+    CudaDataMatrixD res{a._size};
+
+    eval_interp_k<Mesh3D><<<nblocks, blocksize>>>(
+            a.data.get(),
+            mesh->_ids_cu.data.get(),
+            res.data.get(),
+            clc_x, clc_y, clc_z,
+            inv,
+            a._size);
+    sync_device();
+    return res;
+}
+
 template<typename MeshClass>
-__global__ void eval_stab_first_stage_k(const float * __restrict__ var_ptr,
-                            const size_t * __restrict__ ids_ptr,
-                            const float * __restrict__ normals_x_ptr,
-                            const float * __restrict__ normals_y_ptr,
-                            const float * __restrict__ normals_z_ptr,
-                            const float * __restrict__ face_area_ptr,
-                            const float * __restrict__ volume_ptr,
-                            const float * __restrict__ len_node_center_to_face_ptr,
-                            float * __restrict__ ret_x_ptr,
-                            float * __restrict__ ret_y_ptr,
-                            float * __restrict__ ret_z_ptr,
-                            bool clc_x, bool clc_y, bool clc_z,
-                            size_t n) {
+__global__ void eval_stab_first_stage_k(const float *__restrict__ var_ptr,
+                                        const size_t *__restrict__ ids_ptr,
+                                        const float *__restrict__ normals_x_ptr,
+                                        const float *__restrict__ normals_y_ptr,
+                                        const float *__restrict__ normals_z_ptr,
+                                        const float *__restrict__ face_area_ptr,
+                                        const float *__restrict__ volume_ptr,
+                                        const float *__restrict__ len_node_center_to_face_ptr,
+                                        float *__restrict__ ret_x_ptr,
+                                        float *__restrict__ ret_y_ptr,
+                                        float *__restrict__ ret_z_ptr,
+                                        bool clc_x, bool clc_y, bool clc_z,
+                                        size_t n) {
 
     float interpolation_ret[MeshClass::n_faces];
     float len_node_center_to_face[MeshClass::n_faces];
@@ -325,7 +419,7 @@ __global__ void eval_stab_first_stage_k(const float * __restrict__ var_ptr,
     float face_area[MeshClass::n_faces];
     float var_neigh[MeshClass::n_faces];
     float normals_face[MeshClass::n_dims][MeshClass::n_faces];
-    const float* normals_ptr[MeshClass::n_dims] = {
+    const float *normals_ptr[MeshClass::n_dims] = {
             normals_x_ptr,
             normals_y_ptr,
             normals_z_ptr
@@ -348,7 +442,8 @@ __global__ void eval_stab_first_stage_k(const float * __restrict__ var_ptr,
         interpolate_to_face_linear_cu_k<MeshClass>(crr, var_neigh, interpolation_ret);
         gauss_grad_cu_k<MeshClass>(interpolation_ret, normals_face, face_area, volume, grad);
 
-        interpolate_to_face_upwing_cu_k<MeshClass>(crr, grad, len_node_center_to_face, normals_face, interpolated_upwing);
+        interpolate_to_face_upwing_cu_k<MeshClass>(crr, grad, len_node_center_to_face, normals_face,
+                                                   interpolated_upwing);
 
         write_n_vars_to_self<MeshClass::n_faces>(ret_x_ptr, interpolated_upwing[0], idx, n);
         write_n_vars_to_self<MeshClass::n_faces>(ret_y_ptr, interpolated_upwing[1], idx, n);
@@ -358,19 +453,19 @@ __global__ void eval_stab_first_stage_k(const float * __restrict__ var_ptr,
 
 template<typename MeshClass>
 __global__ void eval_stab_second_stage_k(
-                                        const float * __restrict__ interpolated_upwing_x_prt,
-                                        const float * __restrict__ interpolated_upwing_y_prt,
-                                        const float * __restrict__ interpolated_upwing_z_prt,
-                                        const size_t * __restrict__ ids_ptr,
-                                        const float * __restrict__ normals_x_ptr,
-                                        const float * __restrict__ normals_y_ptr,
-                                        const float * __restrict__ normals_z_ptr,
-                                        const float * __restrict__ face_area_ptr,
-                                        const float * __restrict__ volume_ptr,
-                                        const float * __restrict__ len_node_center_to_face_ptr,
-                                        float * __restrict__ ret_ptr,
-                                        bool clc_x, bool clc_y, bool clc_z,
-                                        size_t n) {
+        const float *__restrict__ interpolated_upwing_x_prt,
+        const float *__restrict__ interpolated_upwing_y_prt,
+        const float *__restrict__ interpolated_upwing_z_prt,
+        const size_t *__restrict__ ids_ptr,
+        const float *__restrict__ normals_x_ptr,
+        const float *__restrict__ normals_y_ptr,
+        const float *__restrict__ normals_z_ptr,
+        const float *__restrict__ face_area_ptr,
+        const float *__restrict__ volume_ptr,
+        const float *__restrict__ len_node_center_to_face_ptr,
+        float *__restrict__ ret_ptr,
+        bool clc_x, bool clc_y, bool clc_z,
+        size_t n) {
 
     float interpolated_upwing[MeshClass::n_dims][MeshClass::n_faces];
     float partial_res[MeshClass::n_dims];
@@ -379,14 +474,14 @@ __global__ void eval_stab_second_stage_k(
     float len_node_center_to_face[MeshClass::n_faces];
     size_t face_neigh_ids[MeshClass::n_faces];
     float face_area[MeshClass::n_faces];
-    float var_neigh[MeshClass::n_faces];
+//    float var_neigh[MeshClass::n_faces];
     float normals_face[MeshClass::n_dims][MeshClass::n_faces];
-    const float* normals_ptr[MeshClass::n_dims] = {
+    const float *normals_ptr[MeshClass::n_dims] = {
             normals_x_ptr,
             normals_y_ptr,
             normals_z_ptr
     };
-    const float* interpolated_upwing_ptr[MeshClass::n_dims] = {
+    const float *interpolated_upwing_ptr[MeshClass::n_dims] = {
             interpolated_upwing_x_prt,
             interpolated_upwing_y_prt,
             interpolated_upwing_z_prt
@@ -396,7 +491,7 @@ __global__ void eval_stab_second_stage_k(
             clc_y,
             clc_z
     };
-    float grad[MeshClass::n_dims];
+//    float grad[MeshClass::n_dims];
 
     float accum[1];
     accum[0] = 0.0;
@@ -414,7 +509,8 @@ __global__ void eval_stab_second_stage_k(
         }
         read_n_vars_from_self<MeshClass::n_faces>(face_area_ptr, face_area, idx, n);
 
-        read_face_vars_from_neigh_opposite_face<MeshClass>(interpolated_upwing_ptr, face_neigh_ids, interpolated_upwing_collected, n);
+        read_face_vars_from_neigh_opposite_face<MeshClass>(interpolated_upwing_ptr, face_neigh_ids,
+                                                           interpolated_upwing_collected, n);
 
 
 #pragma unroll
@@ -433,7 +529,7 @@ __global__ void eval_stab_second_stage_k(
     }
 }
 
-CudaDataMatrixD eval_stab(CudaMesh3D* mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z) {
+CudaDataMatrixD eval_stab(CudaMesh3D *mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z) {
     int blocksize = BLOCK_SIZE;
     int nblocks = std::ceil(static_cast<float>(a._size) / static_cast<float>(blocksize));
     CudaDataMatrixD res{a._size};
@@ -488,27 +584,27 @@ CudaDataMatrixD eval_stab(CudaMesh3D* mesh, const CudaDataMatrixD &a, bool clc_x
 
 
 template<typename MeshClass>
-__global__ void eval_grad2_k(const float * __restrict__ var_ptr,
-                          const size_t * __restrict__ ids_ptr,
-                          const float * __restrict__ normals_alt_x_ptr,
-                          const float * __restrict__ normals_alt_y_ptr,
-                          const float * __restrict__ normals_alt_z_ptr,
-                         const float * __restrict__ normals_x_ptr,
-                         const float * __restrict__ normals_y_ptr,
-                         const float * __restrict__ normals_z_ptr,
-                          const float * __restrict__ face_area_ptr,
-                          const float * __restrict__ alpha_d_ptr,
-                          const float * __restrict__ volume_ptr,
-                          float * __restrict__ ret_ptr,
-                          bool clc_x, bool clc_y, bool clc_z,
-                          size_t n) {
+__global__ void eval_grad2_k(const float *__restrict__ var_ptr,
+                             const size_t *__restrict__ ids_ptr,
+                             const float *__restrict__ normals_alt_x_ptr,
+                             const float *__restrict__ normals_alt_y_ptr,
+                             const float *__restrict__ normals_alt_z_ptr,
+                             const float *__restrict__ normals_x_ptr,
+                             const float *__restrict__ normals_y_ptr,
+                             const float *__restrict__ normals_z_ptr,
+                             const float *__restrict__ face_area_ptr,
+                             const float *__restrict__ alpha_d_ptr,
+                             const float *__restrict__ volume_ptr,
+                             float *__restrict__ ret_ptr,
+                             bool clc_x, bool clc_y, bool clc_z,
+                             size_t n) {
 
     size_t face_neigh_ids[MeshClass::n_faces];
     float face_area[MeshClass::n_faces];
     float alpha_d[MeshClass::n_faces];
     float var_neigh[MeshClass::n_faces];
     float normals_face[MeshClass::n_dims][MeshClass::n_faces];
-    const float* normals_ptr[MeshClass::n_dims] = {
+    const float *normals_ptr[MeshClass::n_dims] = {
             normals_x_ptr,
             normals_y_ptr,
             normals_z_ptr
@@ -543,27 +639,27 @@ __global__ void eval_grad2_k(const float * __restrict__ var_ptr,
     }
 }
 
-CudaDataMatrixD eval_grad2(CudaMesh3D* mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z) {
+CudaDataMatrixD eval_grad2(CudaMesh3D *mesh, const CudaDataMatrixD &a, bool clc_x, bool clc_y, bool clc_z) {
     int blocksize = BLOCK_SIZE;
     int nblocks = std::ceil(static_cast<float>(a._size) / static_cast<float>(blocksize));
     CudaDataMatrixD res{a._size};
 
     eval_grad2_k<Mesh3D><<<nblocks, blocksize>>>(a.data.get(),
-                                       mesh->_ids_cu.data.get(),
+                                                 mesh->_ids_cu.data.get(),
 
-                                        mesh->_normal_alt_x_cu.data.get(),
-                                        mesh->_normal_alt_y_cu.data.get(),
-                                        mesh->_normal_alt_z_cu.data.get(),
-                                        mesh->_normal_x_cu.data.get(),
-                                        mesh->_normal_y_cu.data.get(),
-                                        mesh->_normal_z_cu.data.get(),
+                                                 mesh->_normal_alt_x_cu.data.get(),
+                                                 mesh->_normal_alt_y_cu.data.get(),
+                                                 mesh->_normal_alt_z_cu.data.get(),
+                                                 mesh->_normal_x_cu.data.get(),
+                                                 mesh->_normal_y_cu.data.get(),
+                                                 mesh->_normal_z_cu.data.get(),
 
-                                       mesh->_face_areas_cu.data.get(),
-                                       mesh->_alpha_d_cu.data.get(),
-                                       mesh->_volumes_cu.data.get(),
-                                       res.data.get(),
-                                       clc_x, clc_y, clc_z,
-                                       a._size);
+                                                 mesh->_face_areas_cu.data.get(),
+                                                 mesh->_alpha_d_cu.data.get(),
+                                                 mesh->_volumes_cu.data.get(),
+                                                 res.data.get(),
+                                                 clc_x, clc_y, clc_z,
+                                                 a._size);
     sync_device();
     return res;
 }

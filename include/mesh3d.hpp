@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -37,7 +37,12 @@ class Mesh3D;
 
 class Vertex3D : AbstractVertex {
 public:
+    Vertex3D() {};
     Vertex3D(float x, float y, float z, size_t id) : _id{id}, _coords(x, y, z) {};
+    void set(float x, float y, float z, size_t id) {
+        _id = id;
+        _coords = {x, y, z};
+    };
 
     void compute() override {};
 
@@ -56,11 +61,20 @@ public:
 
 class Face3D : AbstractFace {
 public:
+    Face3D() {};
     Face3D(size_t vrtx_1_id, size_t vrtx_2_id, size_t vrtx_3_id, size_t vrtx_4_id, size_t id) : _id{id},
                                                                                                 _vertexes_id{vrtx_1_id,
                                                                                                              vrtx_2_id,
                                                                                                              vrtx_3_id,
                                                                                                              vrtx_4_id} {};
+
+    void set(size_t vrtx_1_id, size_t vrtx_2_id, size_t vrtx_3_id, size_t vrtx_4_id, size_t id) {
+        _id = id;
+        _vertexes_id = {vrtx_1_id,
+                     vrtx_2_id,
+                     vrtx_3_id,
+                     vrtx_4_id};
+};
 
     void compute() override;
 
@@ -71,6 +85,7 @@ public:
     bool _set = false;
     std::array<size_t, 4> _vertexes_id;
     std::vector<size_t> _nodes_id{};
+    bool _is_bound = false;
     Eigen::Matrix<float, 3, 1> _normal = {0, 0, 0};
     Eigen::Matrix<float, 3, 1> _normal_alt = {0, 0, 0};
     Eigen::Matrix<float, 3, 1> _center_coords = {0, 0, 0};
@@ -79,21 +94,33 @@ public:
 
 class Quadrangle3D : AbstractCell {
 public:
+    Quadrangle3D() {};
     Quadrangle3D(size_t f1, size_t f2, size_t f3, size_t f4, size_t f5, size_t f6,
                  size_t v1, size_t v2, size_t v3, size_t v4, size_t v5, size_t v6, size_t v7, size_t v8,
                  size_t id,
                  size_t x_, size_t y_, size_t z_) :
-            _id{id}, _faces_id{f1, f2, f3, f4, f5, f6}, _vertexes_id{v1, v2, v3, v4, v5, v6, v7, v8},
-            _coord_idx{x_, y_, z_} {};
+            _id{id}, _faces_id{f1, f2, f3, f4, f5, f6}, _vertexes_id{v1, v2, v3, v4, v5, v6, v7, v8} {};
+
+    void set(size_t f1, size_t f2, size_t f3, size_t f4, size_t f5, size_t f6,
+                 size_t v1, size_t v2, size_t v3, size_t v4, size_t v5, size_t v6, size_t v7, size_t v8,
+                 size_t id,
+                 size_t x_, size_t y_, size_t z_) {
+        _id = id;
+        _faces_id = {f1, f2, f3, f4, f5, f6};
+        _vertexes_id = {v1, v2, v3, v4, v5, v6, v7, v8};
+    };
 
     void compute() override;
 
-    [[nodiscard]] Eigen::Matrix<float, -1, 1> center_coords() const override;
+//    [[nodiscard]] Eigen::Matrix<float, -1, 1> center_coords() const override;
+    [[nodiscard]] Eigen::Matrix<float, 3, 1> center_coords() const;
 
     [[nodiscard]] bool is_boundary() const override;
 
     [[nodiscard]] bool is_boundary_x() const;
+
     [[nodiscard]] bool is_boundary_y() const;
+
     [[nodiscard]] bool is_boundary_z() const;
 
     [[nodiscard]] float x() const;
@@ -106,29 +133,41 @@ public:
 
     Mesh3D *_mesh = nullptr;
     size_t _id;
-    std::array<size_t, 6> _faces_id;
-    std::array<size_t, 8> _vertexes_id;
-    Eigen::Matrix<float, 3, 1> _center_coords = {0, 0, 0};
-    std::array<size_t, 3> _coord_idx = {0, 0, 0};
-    Eigen::Matrix<float, 6, 3> _normals = {};
-    Eigen::Matrix<float, 6, 3> _normals_alt = {};
+
+    static constexpr int N_FACES = 6;
+    static constexpr int N_VERTICES = 8;
+    static constexpr int N_DIMS = 3;
+
+    std::array<size_t, N_FACES> _faces_id;
+    std::array<size_t, N_VERTICES> _vertexes_id;
+    Eigen::Matrix<float, N_DIMS, 1> _center_coords = {0, 0, 0};
+    Eigen::Matrix<float, N_FACES, N_DIMS> _normals = {};
+    Eigen::Matrix<float, N_FACES, N_DIMS> _normals_alt = {};
+
+    std::array<bool, N_DIMS> _is_bound_dir;
+    bool _is_bound;
+
     float _volume = 0;
 };
 
 class Mesh3D : AbstractMesh {
 public:
     Mesh3D(size_t x, size_t y, size_t z, float dx, float dy, float dz) : _num_nodes{x * y * z}, _x{x}, _y{y}, _z{z},
-                                                                            _lx{dx * static_cast<float>(x)},
-                                                                            _ly{dy * static_cast<float>(y)},
-                                                                            _lz{dz * static_cast<float>(z)}, _dx{dx},
-                                                                            _dy{dy}, _dz{dz} {};
+                                                                         _lx{dx * static_cast<float>(x)},
+                                                                         _ly{dy * static_cast<float>(y)},
+                                                                         _lz{dz * static_cast<float>(z)}, _dx{dx},
+                                                                         _dy{dy}, _dz{dz} {};
 
     void compute() override;
 
     void init_basic_internals();
 
 
-    [[nodiscard]] size_t square_node_coord_to_idx(size_t x, size_t y, size_t z) const;
+    template<int pad_x = 0, int pad_y = 0, int pad_z = 0>
+    inline size_t square_node_coord_to_idx(size_t x, size_t y, size_t z) const {
+//        return (_x + pad_x) * (_y + pad_y) * z + (_x + pad_x) * y + x;
+        return (_z + pad_z) * (_y + pad_y) * x + (_z + pad_z) * y + z;
+    }
 
     [[nodiscard]] std::array<size_t, 6> square_node_coord_to_face_idx(size_t x, size_t y, size_t z) const;
 
@@ -148,9 +187,10 @@ public:
     float _dy;
     float _dz;
 
-    std::vector<std::shared_ptr<Vertex3D>> _vertexes{};
-    std::vector<std::shared_ptr<Face3D>> _faces{};
-    std::vector<std::shared_ptr<Quadrangle3D>> _nodes{};
+
+    std::vector<Vertex3D> _vertexes{};
+    std::vector<Face3D> _faces{};
+    std::vector<Quadrangle3D> _nodes{};
 
     MatrixX6dRB _normal_x{};
     MatrixX6dRB _normal_y{};
@@ -163,6 +203,8 @@ public:
     std::vector<MatrixX6dRB *> _normals_alt_all{};
 
     MatrixX6Idx _ids{};
+    MatrixX6Idx32 _ids32{};
+    bool _ids_available_int32 = false;
     MatrixX6SignIdx _ids_bound_free{};
 
     MatrixX6dRB _alpha_d{};
@@ -180,6 +222,18 @@ public:
 
 };
 
+enum class TypeEnum {
+    ConstDoublePointer,
+    DoublePointer,
+    ConstSizeTPointer,
+    ConstUint32TPointer,
+    Boolean,
+    SizeT,
+    Uint32T,
+    Double,
+    Int,
+};
+
 class CudaMesh3D : public Mesh3D {
 public:
 
@@ -194,6 +248,10 @@ public:
     CudaDataMatrixD _normal_alt_z_cu{};
 
     CudaDataMatrix<size_t> _ids_cu{};
+    std::string _ids_data_type = "size_t";
+    void* _ids_mtrx_ptr = nullptr;
+    TypeEnum _ids_data_type_en;
+    CudaDataMatrix<uint32_t> _ids32_cu{};
     CudaDataMatrix<ptrdiff_t> _ids_bound_free_cu{};
 
     CudaDataMatrixD _alpha_d_cu{};
@@ -216,6 +274,18 @@ public:
         _normal_alt_z_cu = CudaDataMatrixD::from_eigen(_normal_alt_z);
 
         _ids_cu = CudaDataMatrix<size_t>::from_eigen(_ids);
+        _ids_mtrx_ptr = &_ids_cu;
+        _ids_data_type = "size_t";
+        _ids_data_type_en = TypeEnum::ConstSizeTPointer;
+        if (_ids_available_int32) {
+            std::cout << "Using int32 ids" << std::endl;
+            _ids32_cu = CudaDataMatrix<uint32_t>::from_eigen(_ids32);
+            _ids_mtrx_ptr = &_ids32_cu;
+            _ids_data_type = "uint32_t";
+            _ids_data_type_en = TypeEnum::ConstUint32TPointer;
+        } else {
+            std::cout << "Using int64 ids" << std::endl;
+        }
         _ids_bound_free_cu = CudaDataMatrix<ptrdiff_t>::from_eigen(_ids_bound_free);
 
         _alpha_d_cu = CudaDataMatrixD::from_eigen(_alpha_d);

@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,40 +23,62 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <thread>
 #include <argparse/argparse.hpp>
 
-#include "mesh3d.hpp"
-#include "fvm3d.hpp"
+#include "operators.hpp"
+#include "equation.hpp"
 #include "utils3d.hpp"
 
-Eigen::Matrix<float, -1, 1> boundary_sine(Mesh3D* mesh, Eigen::Matrix<float, -1, 1>& arr, const DT* dt_) {
+// ============================================================================
+// OPTIMIZED BOUNDARY CONDITIONS
+// ============================================================================
 
-    Eigen::Matrix<float, -1, 1> ret{arr};
-    ret[mesh->square_node_coord_to_idx(mesh->_x * 0.1, mesh->_y * 0.1, mesh->_z * 0.1)] = std::sin(static_cast<float>(dt_->_current_time_step_int) * 0.2);
-    ret[mesh->square_node_coord_to_idx(mesh->_x * 0.9, mesh->_y * 0.9, mesh->_z * 0.9)] = std::sin(static_cast<float>(dt_->_current_time_step_int) * 0.2);
+// Pre-compute boundary node indices for wave equation
+struct WaveBoundaryNodes {
+    size_t node1_idx;
+    size_t node2_idx;
+    float frequency;
+    
+    WaveBoundaryNodes(Mesh3D *mesh, float freq = 0.2f) : frequency(freq) {
+        node1_idx = mesh->square_node_coord_to_idx(mesh->_x * 0.1, mesh->_y * 0.1, mesh->_z * 0.1);
+        node2_idx = mesh->square_node_coord_to_idx(mesh->_x * 0.9, mesh->_y * 0.9, mesh->_z * 0.9);
+    }
+};
 
-    return ret;
+// CPU version - time-dependent sine boundary condition
+auto create_wave_boundary_condition(const WaveBoundaryNodes &boundary_nodes) {
+    return [&boundary_nodes](Mesh3D *mesh, Eigen::Matrix<float, -1, 1> &arr, const DT *dt_) {
+        Eigen::Matrix<float, -1, 1> ret = arr;
+        float time_value = std::sin(static_cast<float>(dt_->_current_time_step_int) * boundary_nodes.frequency);
+        ret(boundary_nodes.node1_idx) = time_value;
+        ret(boundary_nodes.node2_idx) = time_value;
+        return ret;
+    };
 }
 
-__global__ void boundary_sine_k(float *a, size_t dt_itr, size_t n_1, size_t n_2) {
+// CUDA kernel for optimized boundary condition
+__global__ void wave_boundary_kernel(float *arr, size_t node1_idx, size_t node2_idx, float time_value) {
     auto idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx == n_1 || idx == n_2) {
-        a[idx] = std::sin(static_cast<float>(dt_itr) * 0.2);
+    if (idx == node1_idx || idx == node2_idx) {
+        arr[idx] = time_value;
     }
 }
 
-CudaDataMatrixD boundary_sine_cu(Mesh3D* mesh, CudaDataMatrixD& arr, const DT* dt_) {
-    CudaDataMatrixD arr_n{arr};
-
-    size_t n_1 = mesh->square_node_coord_to_idx(mesh->_x * 0.1, mesh->_y * 0.1, mesh->_z * 0.1);
-    size_t n_2 = mesh->square_node_coord_to_idx(mesh->_x * 0.9, mesh->_y * 0.9, mesh->_z * 0.9);
-
-    int blocksize = 1024;
-    int nblocks = std::ceil(static_cast<float>(arr_n._size) / static_cast<float>(blocksize));
-    boundary_sine_k<<<nblocks, blocksize>>>(arr_n.data.get(), dt_->_current_time_step_int, n_1, n_2);
-    sync_device();
-
-    return arr_n;
+// CUDA version - time-dependent sine boundary condition
+auto create_wave_boundary_condition_cu(const WaveBoundaryNodes &boundary_nodes) {
+    return [&boundary_nodes](Mesh3D *mesh, CudaDataMatrixD &arr, const DT *dt_) {
+        float time_value = std::sin(static_cast<float>(dt_->_current_time_step_int) * boundary_nodes.frequency);
+        
+        int blocksize = 1024;
+        int nblocks = std::ceil(static_cast<float>(arr._size) / static_cast<float>(blocksize));
+        wave_boundary_kernel<<<nblocks, blocksize>>>(
+                arr.data.get(),
+                boundary_nodes.node1_idx,
+                boundary_nodes.node2_idx,
+                time_value
+        );
+        sync_device();
+        
+    };
 }
-
 
 int main(int argc, char **argv) {
     SingleLibInitializer3D initializer{argc, argv};
@@ -64,27 +86,44 @@ int main(int argc, char **argv) {
     auto mesh = initializer.mesh;
     auto timesteps = initializer.timesteps;
 
-    auto initial_zero = initial_with_val(mesh.get(), 0);
-//    auto u = Variable(mesh.get(), initial_zero, boundary_sine, boundary_sine_cu, "u");
-    auto u = Variable(mesh.get(), initial_zero, boundary_sine, "u");
+    // Pre-compute boundary node information for optimized performance
+    WaveBoundaryNodes boundary_nodes(mesh.get(), 0.2f);
+    
+    // Create boundary condition factories
+    auto wave_bc = create_wave_boundary_condition(boundary_nodes);
+    auto wave_bc_cu = create_wave_boundary_condition_cu(boundary_nodes);
 
-    std::vector<Variable*> space_vars {&u};
+    auto initial_zero = initial_with_val(mesh.get(), 0);
+    auto u = Variable(mesh.get(), initial_zero, wave_bc, wave_bc_cu, "u");
+
+    std::vector<Variable *> space_vars{&u};
     auto dt = DT(mesh.get(), UpdatePolicies::constant_dt, UpdatePolicies::constant_dt_cu, 0.1, space_vars);
 
+    // Wave equation: ∂²u/∂t² = c²∇²u
+    // where c = 0.3 is the wave speed
     float c = 0.3;
 
     EquationTemplate equation_system = {
-            {d2t(u), '=', c * c * (d2dx(u) + d2dy(u)), true},
+        {d2t(u), '=', c * c * lapl(u), true},
     };
 
-    std::vector<Variable*> all_vars {&u};
+    std::vector<Variable *> all_vars{&u};
     auto equation = Equation(timesteps);
     initializer.init_store(all_vars);
 
     auto begin = std::chrono::steady_clock::now();
     equation.evaluate(all_vars, equation_system, &dt, initializer.visualize, all_vars);
     auto end = std::chrono::steady_clock::now();
-    if (CFDArcoGlobalInit::get_rank() == 0) std::cout << std::endl << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[microseconds]" << std::endl;
+    
+    if (CFDArcoGlobalInit::get_rank() == 0) {
+        std::cout << "\n3D Wave Equation Simulation Completed!" << std::endl;
+        std::cout << "Wave speed (c) = " << c << std::endl;
+        std::cout << "Boundary condition: sin(ωt) at two corner points" << std::endl;
+        std::cout << "Frequency (ω) = " << boundary_nodes.frequency << std::endl;
+        std::cout << "Expected behavior: Wave propagation from source points" << std::endl;
+        std::cout << "Time elapsed = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()
+                  << " [us]" << std::endl;
+    }
 
     initializer.finalize();
     return 0;

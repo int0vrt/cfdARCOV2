@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -41,71 +41,31 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-template<typename Variable, typename MeshClass>
-void store_history(const std::vector<Variable *> &vars_to_store, const MeshClass *mesh) {
-    if (CFDArcoGlobalInit::get_rank() == 0) {
-        fs::create_directories(CFDArcoGlobalInit::store_dir);
-    }
-    for (auto var: vars_to_store) {
-
-        auto store_var_dir = CFDArcoGlobalInit::store_dir / var->name;
-        fs::create_directories(store_var_dir);
-
-        for (int i = 0; i < var->history.size() - 1; ++i) {
-//            Eigen::Matrix<float, -1, 1> grid_hist = CFDArcoGlobalInit::recombine(var->history[i], "to_grid");
-            Eigen::Matrix<float, -1, 1> grid_hist = var->history[i];
-
-            if (CFDArcoGlobalInit::get_rank() == 0) {
-//                std::fstream file;
-//                file.open(store_var_dir / (std::to_string(i) + ".bin"), std::ios_base::out | std::ios_base::binary);
-//
-//                if (!file.is_open()) {
-//                    std::cerr << "Unable to open the file" << std::endl;
-//                    return;
-//                }
-//
-//
-//                file.write(reinterpret_cast<char *>(grid_hist.data()),
-//                           grid_hist.rows() * grid_hist.cols() * sizeof(float));
-//                file.close();
-
-                vtkNew<vtkImageData> imageData;
-                imageData->SetDimensions(mesh->_x, mesh->_y, mesh->_z);
-                imageData->AllocateScalars(VTK_FLOAT, 0);
-                int *dims = imageData->GetDimensions();
+template<typename MeshClass>
+void write_single_vti_file(const MeshClass *mesh, Eigen::Matrix<float, -1, 1> &grid_hist, const fs::path& store_path) {
+    vtkNew<vtkImageData> imageData;
+    imageData->SetDimensions(mesh->_x, mesh->_y, mesh->_z);
+    imageData->AllocateScalars(VTK_FLOAT, 0);
+    int *dims = imageData->GetDimensions();
 
 #pragma omp parallel for collapse(3)
-                for (int z = 0; z < dims[2]; z++) {
-                    for (int y = 0; y < dims[1]; y++) {
-                        for (int x = 0; x < dims[0]; x++) {
-                            float *pixel = static_cast<float *>(imageData->GetScalarPointer(x, y, z));
-                            float mesh_val = grid_hist(mesh->square_node_coord_to_idx(x, y, z));
-                            pixel[0] = mesh_val;
-                        }
-                    }
-                }
-
-                vtkNew<vtkXMLImageDataWriter> writer;
-                writer->SetFileName(fs::path{store_var_dir / ("res_" + std::to_string(i) + ".vti")}.c_str());
-                writer->SetInputData(imageData);
-                writer->Write();
+    for (int z = 0; z < dims[2]; z++) {
+        for (int y = 0; y < dims[1]; y++) {
+            for (int x = 0; x < dims[0]; x++) {
+                float *pixel = static_cast<float *>(imageData->GetScalarPointer(x, y, z));
+                float mesh_val = grid_hist(mesh->square_node_coord_to_idx(x, y, z));
+                pixel[0] = mesh_val;
             }
         }
     }
 
-    if (CFDArcoGlobalInit::get_rank() == 0) {
-//        store_mesh(mesh, CFDArcoGlobalInit::store_dir);
-        auto store_dir_latest = fs::absolute(CFDArcoGlobalInit::store_dir / ".." / "run_latest");
-        fs::remove_all(store_dir_latest);
-        fs::create_symlink(fs::absolute(CFDArcoGlobalInit::store_dir), store_dir_latest);
-
-    }
+    vtkNew<vtkXMLImageDataWriter> writer;
+    writer->SetFileName(store_path.c_str());
+    writer->SetInputData(imageData);
+    writer->Write();
 }
 
-template<typename Variable, typename MeshClass>
-void init_store_history_stepping(const std::vector<Variable *> &vars_to_store, const MeshClass *mesh,
-                                 const fs::path &store_path) {
-    CFDArcoGlobalInit::store_stepping = true;
+inline void start_base_store(const std::vector<Variable *> &vars_to_store) {
     if (CFDArcoGlobalInit::get_rank() == 0) {
         fs::create_directories(CFDArcoGlobalInit::store_dir);
 
@@ -113,103 +73,140 @@ void init_store_history_stepping(const std::vector<Variable *> &vars_to_store, c
             auto store_var_dir = CFDArcoGlobalInit::store_dir / var->name;
             fs::create_directories(store_var_dir);
         }
-
-        store_mesh(mesh, CFDArcoGlobalInit::store_dir);
     }
 }
 
-template<typename Variable, typename MeshClass>
-void finalize_history_stepping(const fs::path &store_path) {
+inline void end_base_store() {
     if (CFDArcoGlobalInit::get_rank() == 0) {
-        auto store_dir_latest = fs::absolute(store_path / "run_latest");
+        auto store_dir_latest = fs::absolute(CFDArcoGlobalInit::store_dir / ".." / "run_latest");
         fs::remove_all(store_dir_latest);
         fs::create_symlink(fs::absolute(CFDArcoGlobalInit::store_dir), store_dir_latest);
     }
 }
 
-
 template<typename Variable, typename MeshClass>
-void store_history_stepping(const std::vector<Variable *> &vars_to_store, const MeshClass *mesh, int i) {
-    if (CFDArcoGlobalInit::get_rank() == 0) {
-        fs::create_directories(CFDArcoGlobalInit::store_dir);
-    }
+void store_history(const std::vector<Variable *> &vars_to_store, const MeshClass *mesh) {
+    start_base_store(vars_to_store);
+
     for (auto var: vars_to_store) {
 
         auto store_var_dir = CFDArcoGlobalInit::store_dir / var->name;
-        fs::create_directories(store_var_dir);
 
-//        auto grid_hist = CFDArcoGlobalInit::recombine(var->current, "to_grid");
-        auto grid_hist = var->current;
+        for (int i = 0; i < var->history.size() - 1; ++i) {
+            Eigen::Matrix<float, -1, 1> &grid_hist = var->history[i];
+            if ((i % CFDArcoGlobalInit::store_n) != 0) {
+                continue;
+            }
+            fs::path store_path = fs::path{store_var_dir / ("res_" + std::to_string(i) + ".vti")};
+            write_single_vti_file(mesh, grid_hist, store_path);
+        }
+    }
+    end_base_store();
 
-        if (CFDArcoGlobalInit::get_rank() == 0) {
-            std::fstream file;
-            file.open(store_var_dir / (std::to_string(i) + ".bin"), std::ios_base::out | std::ios_base::binary);
+}
 
-            if (!file.is_open()) {
-                std::cerr << "Unable to open the file" << std::endl;
+void thread_function(int aaa) {
+    StoreInstance store_val;
+    while (1) {
+        bool success_pop = CFDArcoGlobalInit::store_queue.try_pop(store_val);
+        if (success_pop) {
+            if (store_val.finalize_) {
                 return;
             }
 
-
-            file.write(reinterpret_cast<char *>(grid_hist.data()),
-                       grid_hist.rows() * grid_hist.cols() * sizeof(float));
-            file.close();
+            auto store_var_dir = CFDArcoGlobalInit::store_dir / store_val.name_;
+            fs::path store_path = fs::path{store_var_dir / ("res_" + std::to_string(store_val.i_) + ".vti")};
+            write_single_vti_file(static_cast<Mesh3D*>(store_val.mesh_ptr_), store_val.data_, store_path);
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds{1});
         }
     }
 }
 
-template<typename MeshClass>
-void store_mesh(const MeshClass *mesh, const fs::path &store_path) {
-    json mesh_json;
+inline void init_store_history_stepping(const std::vector<Variable *> &vars_to_store) {
+    CFDArcoGlobalInit::store_stepping = true;
+    start_base_store(vars_to_store);
+    CFDArcoGlobalInit::store_queue = oneapi::tbb::concurrent_queue<StoreInstance>{};
 
-    auto vertexes = json::array();
-    auto faces = json::array();
-    auto nodes = json::array();
-
-    for (auto vrtx: mesh->_vertexes) {
-        vertexes.push_back(json::array({vrtx->x(), vrtx->y(), vrtx->z()}));
-    }
-    for (auto face: mesh->_faces) {
-        auto vertexes_id = json::array({face->_vertexes_id.at(0), face->_vertexes_id.at(1), face->_vertexes_id.at(2),
-                                        face->_vertexes_id.at(3)});
-        auto nodes_id = json::array();
-        for (auto node_id: face->_nodes_id) {
-            nodes_id.push_back(node_id);
-        }
-        faces.push_back({
-                                {"vertexes_id", vertexes_id},
-                                {"nodes_id",    nodes_id},
-                        });
-    }
-    for (auto node: mesh->_nodes) {
-        auto node_faces_arr = json::array();
-        for (auto face_id: node->_faces_id) {
-            node_faces_arr.push_back(face_id);
-        }
-        auto node_vrtx_arr = json::array();
-        for (auto vrtx_id: node->_vertexes_id) {
-            node_vrtx_arr.push_back(vrtx_id);
-        }
-        nodes.push_back({
-                                {"vertexes", node_vrtx_arr},
-                                {"face",     node_faces_arr},
-                        });
-    }
-
-    mesh_json["vertexes"] = vertexes;
-    mesh_json["face"] = faces;
-    mesh_json["nodes"] = nodes;
-
-    mesh_json["x"] = mesh->_x;
-    mesh_json["y"] = mesh->_y;
-    mesh_json["z"] = mesh->_z;
-    mesh_json["lx"] = mesh->_lx;
-    mesh_json["ly"] = mesh->_ly;
-    mesh_json["lz"] = mesh->_lz;
-
-    std::ofstream o(store_path / "mesh.json");
-    o << std::setw(4) << mesh_json << std::endl;
+    CFDArcoGlobalInit::store_thread.join();
+    CFDArcoGlobalInit::store_thread = std::thread(thread_function, 10);
 }
+
+inline void finalize_history_stepping() {
+    Eigen::Matrix<float, -1, 1> tmp_m = Eigen::Matrix<float, -1, 1>{1};
+    std::string tmp_n = "";
+    Mesh3D* tmp_mesh = nullptr;
+
+    CFDArcoGlobalInit::store_queue.push(StoreInstance{tmp_m, tmp_mesh, tmp_n, 0, true});
+    CFDArcoGlobalInit::store_thread.join();
+    end_base_store();
+}
+
+
+template<typename Variable, typename MeshClass>
+void store_history_stepping(Variable * var, MeshClass *mesh, int i) {
+//    auto store_var_dir = CFDArcoGlobalInit::store_dir / var->name;
+//    fs::path store_path = fs::path{store_var_dir / ("res_" + std::to_string(i) + ".vti")};
+//    Eigen::Matrix<float, -1, 1> &grid_hist = var->current;
+//    write_single_vti_file(mesh, grid_hist, store_path);
+
+    CFDArcoGlobalInit::store_queue.push(StoreInstance{var->current, mesh, var->name, i, false});
+}
+
+
+//
+//template<typename MeshClass>
+//void store_mesh(const MeshClass *mesh, const fs::path &store_path) {
+//    json mesh_json;
+//
+//    auto vertexes = json::array();
+//    auto faces = json::array();
+//    auto nodes = json::array();
+//
+//    for (auto vrtx: mesh->_vertexes) {
+//        vertexes.push_back(json::array({vrtx->x(), vrtx->y(), vrtx->z()}));
+//    }
+//    for (auto face: mesh->_faces) {
+//        auto vertexes_id = json::array({face->_vertexes_id.at(0), face->_vertexes_id.at(1), face->_vertexes_id.at(2),
+//                                        face->_vertexes_id.at(3)});
+//        auto nodes_id = json::array();
+//        for (auto node_id: face->_nodes_id) {
+//            nodes_id.push_back(node_id);
+//        }
+//        faces.push_back({
+//                                {"vertexes_id", vertexes_id},
+//                                {"nodes_id",    nodes_id},
+//                        });
+//    }
+//    for (auto node: mesh->_nodes) {
+//        auto node_faces_arr = json::array();
+//        for (auto face_id: node->_faces_id) {
+//            node_faces_arr.push_back(face_id);
+//        }
+//        auto node_vrtx_arr = json::array();
+//        for (auto vrtx_id: node->_vertexes_id) {
+//            node_vrtx_arr.push_back(vrtx_id);
+//        }
+//        nodes.push_back({
+//                                {"vertexes", node_vrtx_arr},
+//                                {"face",     node_faces_arr},
+//                        });
+//    }
+//
+//    mesh_json["vertexes"] = vertexes;
+//    mesh_json["face"] = faces;
+//    mesh_json["nodes"] = nodes;
+//
+//    mesh_json["x"] = mesh->_x;
+//    mesh_json["y"] = mesh->_y;
+//    mesh_json["z"] = mesh->_z;
+//    mesh_json["lx"] = mesh->_lx;
+//    mesh_json["ly"] = mesh->_ly;
+//    mesh_json["lz"] = mesh->_lz;
+//
+//    std::ofstream o(store_path / "mesh.json");
+//    o << std::setw(4) << mesh_json << std::endl;
+//}
 
 
 //template<typename Variable, typename MeshClass>

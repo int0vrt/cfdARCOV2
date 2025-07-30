@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,12 +22,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "decls.hpp"
 #include "mesh3d.hpp"
 
-__device__ inline size_t global_stride(size_t n, int fc, size_t idx) { return n * fc + idx; }
-__device__ inline size_t local_stride(size_t n, int fc, size_t idx) { return fc; }
+#include "cuda_pipeline.h"
+
+#ifndef BLOCKSIZE
+#define BLOCKSIZE 1
+#endif
+
+
+__device__ __forceinline__ size_t global_stride(size_t n, int fc, size_t idx) { return n * fc + idx; }
+
+__device__ __forceinline__ size_t local_stride(size_t n, int fc, size_t idx) { return fc; }
 
 
 template<typename MeshClass, typename T>
-__device__ inline void read_face_vars_from_neigh(const T * __restrict__ var,
+__device__ __forceinline__ void read_face_vars_from_neigh(const T *__restrict__ var,
                                                  const size_t ids[MeshClass::n_faces],
                                                  T ret[MeshClass::n_faces],
                                                  size_t n) {
@@ -38,7 +46,7 @@ __device__ inline void read_face_vars_from_neigh(const T * __restrict__ var,
 }
 
 template<int N, typename T>
-__device__ inline void read_n_vars_from_self(const T * __restrict__ var,
+__device__ __forceinline__ void read_n_vars_from_self(const T *__restrict__ var,
                                              T ret[N],
                                              size_t idx, size_t n) {
 #pragma unroll
@@ -47,8 +55,60 @@ __device__ inline void read_n_vars_from_self(const T * __restrict__ var,
     }
 }
 
+template<int N, typename T>
+__device__ __forceinline__ void read_idxs_from_self_pipe(const T *__restrict__ var,
+                                                           T *ret,
+                                                           size_t idx, size_t n) {
+
+#if PIPELINE_SUPPORT
+    constexpr int pipe_step = 4 / (sizeof(T) / sizeof(float));
+
+#pragma unroll
+    for (int fc = 0; fc < N; ++fc) {
+        if (threadIdx.x % pipe_step == 0) __pipeline_memcpy_async(ret + (BLOCKSIZE * fc + threadIdx.x), var + global_stride(n, fc, idx), 16);
+    }
+    __syncthreads();
+#else
+#pragma unroll
+    for (int fc = 0; fc < N; ++fc) {
+        ret[BLOCKSIZE * fc + threadIdx.x] = var[global_stride(n, fc, idx)];
+    }
+#endif
+}
+
+template<int N, typename T>
+__device__ __forceinline__ void read_n_vars_from_self_pipe(const T *__restrict__ var,
+                                                  T *ret,
+                                                  size_t idx, size_t n) {
+
+#if PIPELINE_SUPPORT
+#pragma unroll
+    constexpr int pipe_step = 4 / (sizeof(T) / sizeof(float));
+
+#pragma unroll
+    for (int fc = 0; fc < N; ++fc) {
+        if (threadIdx.x % pipe_step == 0) __pipeline_memcpy_async(ret + (BLOCKSIZE * fc + threadIdx.x), var + global_stride(n, fc, idx), 16);
+    }
+    __syncthreads();
+#else
+#pragma unroll
+    for (int fc = 0; fc < N; ++fc) {
+        ret[BLOCKSIZE * fc + threadIdx.x] = var[global_stride(n, fc, idx)];
+    }
+#endif
+}
+
+template<int N, typename T>
+__device__ __forceinline__ void read_n_vars_from_shmem_to_reg(const T *__restrict__ var,
+                                                     T ret[N]) {
+#pragma unroll
+    for (int fc = 0; fc < N; ++fc) {
+        ret[fc] = var[BLOCKSIZE * fc + threadIdx.x];
+    }
+}
+
 template<typename MeshClass, typename T>
-__device__ inline void read_n_vars_from_neigh(const T * __restrict__ var,
+__device__ __forceinline__ void read_n_vars_from_neigh(const T *__restrict__ var,
                                               const size_t ids[MeshClass::n_faces],
                                               T ret[MeshClass::n_faces]) {
 #pragma unroll
@@ -58,8 +118,20 @@ __device__ inline void read_n_vars_from_neigh(const T * __restrict__ var,
 }
 
 
+template<typename MeshClass, typename T, typename IdsT>
+__device__ __forceinline__ void read_n_vars_from_neigh_shmem(const T *__restrict__ var,
+                                                    const IdsT *ids,
+                                                    T ret[MeshClass::n_faces]) {
+#pragma unroll
+    for (int fc = 0; fc < MeshClass::n_faces; ++fc) {
+        int idx_n = ids[BLOCKSIZE * fc + threadIdx.x];
+        ret[fc] = var[idx_n];
+    }
+}
+
+
 template<typename MeshClass, typename T>
-__device__ inline void read_normals_from_self(const T * __restrict__ var[MeshClass::n_dims],
+__device__ __forceinline__ void read_normals_from_self(const T *__restrict__ var[MeshClass::n_dims],
                                               T ret[MeshClass::n_dims][MeshClass::n_faces],
                                               size_t idx, size_t n) {
 #pragma unroll
@@ -70,8 +142,30 @@ __device__ inline void read_normals_from_self(const T * __restrict__ var[MeshCla
     }
 }
 
+template<typename MeshClass, typename T>
+__device__ __forceinline__ void read_normals_from_shared_to_neigh(const T *__restrict__ shmem,
+                                                         T ret[MeshClass::n_dims][MeshClass::n_faces]) {
+#pragma unroll
+    for (int dm = 0; dm < MeshClass::n_dims; ++dm) {
+        for (int fc = 0; fc < MeshClass::n_faces; ++fc) {
+            ret[dm][fc] = shmem[dm * MeshClass::n_faces * BLOCKSIZE + fc * BLOCKSIZE + threadIdx.x];
+        }
+    }
+}
+
+template<typename MeshClass, typename T>
+__device__ __forceinline__ void read_normals_from_self_pipe(const T *__restrict__ var[MeshClass::n_dims],
+                                                   T *ret,
+                                                   size_t idx, size_t n) {
+#pragma unroll
+    for (int dm = 0; dm < MeshClass::n_dims; ++dm) {
+        read_n_vars_from_self_pipe<MeshClass::n_faces>(var[dm], ret + dm * MeshClass::n_faces * BLOCKSIZE, idx, n);
+//        read_idxs_from_self_pipe<MeshClass::n_faces>(var[dm], ret + dm * MeshClass::n_faces * BLOCKSIZE, idx, n);
+    }
+}
+
 template<int N, typename T>
-__device__ inline void write_n_vars_to_self(T * __restrict__ var,
+__device__ __forceinline__ void write_n_vars_to_self(T *__restrict__ var,
                                             const T ret[N],
                                             size_t idx, size_t n) {
 #pragma unroll
@@ -81,13 +175,13 @@ __device__ inline void write_n_vars_to_self(T * __restrict__ var,
 }
 
 template<typename T>
-__device__ inline void write_one_var_to_self(T * __restrict__ var,
-                                            const T ret,
-                                            size_t idx, size_t n) {
+__device__ __forceinline__ void write_one_var_to_self(T *__restrict__ var,
+                                             const T ret,
+                                             size_t idx, size_t n) {
     var[global_stride(n, 0, idx)] = ret;
 }
 
-__device__ int inline opposite_face_id(int face_id) {
+__device__ int __forceinline__ opposite_face_id(int face_id) {
     if (face_id == 0) return 1;
     if (face_id == 1) return 0;
     if (face_id == 2) return 3;
@@ -98,7 +192,7 @@ __device__ int inline opposite_face_id(int face_id) {
 }
 
 template<typename MeshClass>
-__device__ inline void read_face_vars_from_neigh_opposite_face(const float * __restrict__ var[MeshClass::n_dims],
+__device__ __forceinline__ void read_face_vars_from_neigh_opposite_face(const float *__restrict__ var[MeshClass::n_dims],
                                                                const size_t ids[MeshClass::n_faces],
                                                                float ret[MeshClass::n_dims][MeshClass::n_faces],
                                                                size_t n) {
@@ -113,12 +207,12 @@ __device__ inline void read_face_vars_from_neigh_opposite_face(const float * __r
 }
 
 template<typename T>
-__device__ inline T read_scalar_from_self(const T * __restrict__ var, size_t idx, size_t n) {
+__device__ __forceinline__ T read_scalar_from_self(const T *__restrict__ var, size_t idx, size_t n) {
     return var[global_stride(n, 0, idx)];
 }
 
 template<typename MeshClass>
-__device__ inline void interpolate_to_face_linear_cu_k(const float crr,
+__device__ __forceinline__ void interpolate_to_face_linear_cu_k(const float crr,
                                                        const float var_neigh[MeshClass::n_faces],
                                                        float ret[MeshClass::n_faces]) {
 #pragma unroll
@@ -128,7 +222,7 @@ __device__ inline void interpolate_to_face_linear_cu_k(const float crr,
 }
 
 template<typename MeshClass>
-__device__ inline void interpolate_to_face_upwing_cu_k(const float crr,
+__device__ __forceinline__ void interpolate_to_face_upwing_cu_k(const float crr,
                                                        const float grad[MeshClass::n_dims],
                                                        const float len_node_center_to_face[MeshClass::n_faces],
                                                        const float normals[MeshClass::n_dims][MeshClass::n_faces],
@@ -146,7 +240,7 @@ __device__ inline void interpolate_to_face_upwing_cu_k(const float crr,
 }
 
 template<typename MeshClass>
-__device__ inline void gauss_grad_cu_k(const float face_interpolated[MeshClass::n_faces],
+__device__ __forceinline__ void gauss_grad_cu_k(const float face_interpolated[MeshClass::n_faces],
                                        const float normals[MeshClass::n_dims][MeshClass::n_faces],
                                        const float face_area[MeshClass::n_faces],
                                        const float volume,
@@ -167,7 +261,7 @@ __device__ inline void gauss_grad_cu_k(const float face_interpolated[MeshClass::
 }
 
 template<typename MeshClass>
-__device__ inline void corrected_surface_normal_grad_cu_k(const float crr,
+__device__ __forceinline__ void corrected_surface_normal_grad_cu_k(const float crr,
                                                           const float var_neigh[MeshClass::n_faces],
                                                           const float alpha_d[MeshClass::n_faces],
                                                           float ret[MeshClass::n_faces]) {

@@ -1,6 +1,6 @@
 /*
 cfdARCO - high-level framework for solving systems of PDEs on multi-GPUs system
-Copyright (C) 2024 cfdARCHO
+Copyright (C) 2025 cfdARCO team
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,12 +24,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 #include "cfdarcho_main_3d.hpp"
+
 #ifdef CFDARCHO_HIP_ENABLE
 #include "hip/hip_runtime.h"
 #endif
 #ifdef CFDARCHO_CUDA_ENABLE
+
 #include <cuda_runtime_api.h>
 #include "pool_allocator.hpp"
+
 #endif
 
 template<typename T>
@@ -67,7 +70,7 @@ public:
 
     explicit CudaDataMatrix(size_t size) : _size{size} {
 #ifndef CFDARCO_SKIP_RMM
-        void* ptr = nullptr;
+        void *ptr = nullptr;
 #ifdef CFDARCHO_CUDA_ENABLE
         if (CFDArcoGlobalInit::cuda_enabled && Allocator::allocator_alive) {
             ptr = Allocator::cuda_mem_pool->allocate(_size * sizeof(T));
@@ -86,7 +89,7 @@ public:
 #ifndef CFDARCO_SKIP_RMM
         _size = oth._size;
         if (oth.data != nullptr) {
-            void* ptr = nullptr;
+            void *ptr = nullptr;
 #ifdef CFDARCHO_CUDA_ENABLE
             if (CFDArcoGlobalInit::cuda_enabled && Allocator::allocator_alive) {
                 ptr = Allocator::cuda_mem_pool->allocate(_size * sizeof(T));
@@ -114,7 +117,7 @@ public:
 
     CudaDataMatrix(size_t size, T const_val) : _size{size} {
 #ifndef CFDARCO_SKIP_RMM
-        void* ptr = nullptr;
+        void *ptr = nullptr;
 #ifdef CFDARCHO_CUDA_ENABLE
         if (CFDArcoGlobalInit::cuda_enabled && Allocator::allocator_alive) {
             ptr = Allocator::cuda_mem_pool->allocate(_size * sizeof(T));
@@ -136,6 +139,34 @@ public:
 #ifdef CFDARCHO_HIP_ENABLE
         if (CFDArcoGlobalInit::hip_enabled) {
             hipMemcpy(data.get(), copy_mem.data(), _size * sizeof(T), hipMemcpyHostToDevice);
+        }
+#endif
+#endif
+    }
+
+    CudaDataMatrix(T* data_ptr, size_t size) : _size{size} {
+#ifndef CFDARCO_SKIP_RMM
+        void *ptr = nullptr;
+#ifdef CFDARCHO_CUDA_ENABLE
+        if (CFDArcoGlobalInit::cuda_enabled && Allocator::allocator_alive) {
+            ptr = Allocator::cuda_mem_pool->allocate(_size * sizeof(T));
+        }
+#endif
+#ifdef CFDARCHO_HIP_ENABLE
+        if (CFDArcoGlobalInit::hip_enabled) {
+            hipMalloc(&ptr, _size * sizeof(T));
+        }
+#endif
+        data = std::shared_ptr<T>(static_cast<T *>(ptr), CudaDeleter<T>{_size});
+
+#ifdef CFDARCHO_CUDA_ENABLE
+        if (CFDArcoGlobalInit::cuda_enabled && Allocator::allocator_alive) {
+            cudaMemcpy(data.get(), data_ptr, _size * sizeof(T), cudaMemcpyHostToDevice);
+        }
+#endif
+#ifdef CFDARCHO_HIP_ENABLE
+        if (CFDArcoGlobalInit::hip_enabled) {
+            hipMemcpy(data.get(), data_ptr, _size * sizeof(T), hipMemcpyHostToDevice);
         }
 #endif
 #endif
@@ -173,6 +204,8 @@ public:
         }
 #endif
         return ret;
+#else
+        return {};
 #endif
     }
 
@@ -183,8 +216,8 @@ public:
 //#endif
 //    }
 
-    size_t _size;
-    std::shared_ptr<T> data;
+    size_t _size = 0;
+    std::shared_ptr<T> data = nullptr;
 };
 
 using CudaDataMatrixD = CudaDataMatrix<float>;
