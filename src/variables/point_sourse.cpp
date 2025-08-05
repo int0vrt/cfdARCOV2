@@ -54,7 +54,7 @@ PointSource::PointSource(Mesh3D *mesh_, DT *dt_, int timesteps_, float x_, float
     }
 
     for (int i = 0; i < timesteps_; ++i) {
-        values.push_back(fill_fn_(static_cast<float>(i) * dt_->_dt, ));
+        values.push_back(fill_fn_(static_cast<float>(i) * dt_->_dt));
     }
 
     values_cu = CudaDataMatrixD{values.data(), static_cast<size_t>(timesteps_)};
